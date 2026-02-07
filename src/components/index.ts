@@ -1,1 +1,1 @@
-export { ExampleComponent, type ExampleComponentOptions } from "./ExampleComponent";
+export { Search, type SearchOptions } from "./Search";

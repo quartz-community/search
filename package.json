@@ -1,23 +1,22 @@
 {
-  "name": "@quartz-community/plugin-template",
+  "name": "@quartz-community/search",
   "version": "0.1.0",
-  "description": "Template repository for Quartz community plugins.",
+  "description": "Search component for Quartz - full-text search with FlexSearch.",
   "type": "module",
   "license": "MIT",
   "author": "Quartz Community",
-  "homepage": "https://quartz.jzhao.xyz",
+  "homepage": "https://github.com/quartz-community/search",
   "repository": {
     "type": "git",
-    "url": "https://github.com/quartz-community/plugin-template"
+    "url": "https://github.com/quartz-community/search"
   },
   "keywords": [
     "quartz",
     "quartz-plugin",
-    "plugin-template",
-    "remark",
-    "rehype",
-    "mdast",
-    "hast"
+    "search",
+    "flexsearch",
+    "full-text-search",
+    "component"
   ],
   "files": [
     "dist",

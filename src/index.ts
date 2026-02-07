@@ -1,11 +1,3 @@
-export { ExampleTransformer } from "./transformer";
-export { ExampleFilter } from "./filter";
-export { ExampleEmitter } from "./emitter";
-export { ExampleComponent } from "./components/ExampleComponent";
+export { Search } from "./components/Search";
 
-export type {
-  ExampleTransformerOptions,
-  ExampleFilterOptions,
-  ExampleEmitterOptions,
-  ExampleComponentOptions,
-} from "./types";
+export type { SearchOptions } from "./components/Search";
