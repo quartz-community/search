@@ -468,21 +468,28 @@ const searchScript = `
       }
 
       var results = index.search(term, { limit: numSearchResults, enrich: true });
-      console.log("[Search] Raw results:", results);
+      console.log("[Search] Raw results count:", results ? results.length : 0);
+      console.log("[Search] Raw results[0]:", results && results[0] ? JSON.stringify(results[0]).substring(0, 200) : "none");
       var flatResults = [];
       var seenIds = new Set();
       
       for (var i = 0; i < results.length; i++) {
-        var fieldResults = results[i].result;
-        if (!fieldResults) continue;
+        var fieldResult = results[i];
+        console.log("[Search] Processing field:", fieldResult.field, "results:", fieldResult.result ? fieldResult.result.length : 0);
+        var fieldResults = fieldResult.result;
+        if (!fieldResults || !Array.isArray(fieldResults)) continue;
         for (var j = 0; j < fieldResults.length; j++) {
           var resultItem = fieldResults[j];
+          console.log("[Search] Result item", j, ":", JSON.stringify(resultItem).substring(0, 100));
           if (!resultItem) continue;
-          // FlexSearch might return doc directly or nested
-          var doc = resultItem.doc || resultItem;
-          if (!doc || !doc.id) continue;
-          if (!seenIds.has(doc.id)) {
-            seenIds.add(doc.id);
+          var doc = resultItem.doc;
+          var id = resultItem.id;
+          if (!doc || id === undefined) {
+            console.log("[Search] Skipping - no doc or id");
+            continue;
+          }
+          if (!seenIds.has(id)) {
+            seenIds.add(id);
             flatResults.push(doc);
           }
         }
