@@ -327,11 +327,19 @@ const searchScript = `
 
     function highlightMatch(text, term) {
       if (!term || !text) return text;
-      var specialChars = "[.*+?^$" + "{}()|" + "[\\]\\\\]";
-      var pattern = new RegExp("[" + specialChars + "]", "g");
-      var escaped = term.replace(pattern, function(m) { return "\\" + m; });
-      var regex = new RegExp("(" + escaped + ")", "gi");
-      return text.replace(regex, function(match) { return '<span class="highlight">' + match + '</span>'; });
+      var lowerTerm = term.toLowerCase();
+      var lowerText = text.toLowerCase();
+      var result = "";
+      var lastIndex = 0;
+      var index = lowerText.indexOf(lowerTerm);
+      while (index !== -1) {
+        result += text.substring(lastIndex, index);
+        result += '<span class="highlight">' + text.substring(index, index + term.length) + '</span>';
+        lastIndex = index + term.length;
+        index = lowerText.indexOf(lowerTerm, lastIndex);
+      }
+      result += text.substring(lastIndex);
+      return result;
     }
 
     function fetchContent(slug) {
