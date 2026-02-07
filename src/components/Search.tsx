@@ -467,31 +467,40 @@ const searchScript = `
         return;
       }
 
-      var results = index.search(term, { limit: numSearchResults, enrich: true });
+      var results = index.search(term, { limit: numSearchResults });
       console.log("[Search] Raw results count:", results ? results.length : 0);
-      console.log("[Search] Raw results[0]:", results && results[0] ? JSON.stringify(results[0]).substring(0, 200) : "none");
+      
       var flatResults = [];
       var seenIds = new Set();
+      var idToSlugMap = {};
+      var idCounter = 0;
+      for (var slug in contentData) {
+        idToSlugMap[idCounter++] = slug;
+      }
       
       for (var i = 0; i < results.length; i++) {
         var fieldResult = results[i];
-        console.log("[Search] Processing field:", fieldResult.field, "results:", fieldResult.result ? fieldResult.result.length : 0);
         var fieldResults = fieldResult.result;
         if (!fieldResults || !Array.isArray(fieldResults)) continue;
+        
         for (var j = 0; j < fieldResults.length; j++) {
-          var resultItem = fieldResults[j];
-          console.log("[Search] Result item", j, ":", JSON.stringify(resultItem).substring(0, 100));
-          if (!resultItem) continue;
-          var doc = resultItem.doc;
-          var id = resultItem.id;
-          if (!doc || id === undefined) {
-            console.log("[Search] Skipping - no doc or id");
-            continue;
-          }
-          if (!seenIds.has(id)) {
-            seenIds.add(id);
-            flatResults.push(doc);
-          }
+          var docId = fieldResults[j];
+          if (typeof docId !== "number") continue;
+          if (seenIds.has(docId)) continue;
+          
+          seenIds.add(docId);
+          var slug = idToSlugMap[docId];
+          if (!slug) continue;
+          
+          var item = contentData[slug];
+          if (!item) continue;
+          
+          flatResults.push({
+            id: docId,
+            slug: slug,
+            title: item.title || slug,
+            description: item.description || ""
+          });
         }
       }
 
