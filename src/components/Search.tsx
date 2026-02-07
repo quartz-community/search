@@ -383,6 +383,7 @@ const searchScript = `
 
       for (var i = 0; i < Math.min(results.length, numSearchResults); i++) {
         var result = results[i];
+        if (!result || !result.slug) continue;
         var item = fetchContent(result.slug);
         if (!item) continue;
 
@@ -456,14 +457,26 @@ const searchScript = `
         return;
       }
 
+      if (!contentData) {
+        console.log("[Search] Content data not loaded yet");
+        return;
+      }
+
       var results = index.search(term, { limit: numSearchResults, enrich: true });
       var flatResults = [];
+      var seenIds = new Set();
       
       for (var i = 0; i < results.length; i++) {
         var fieldResults = results[i].result;
+        if (!fieldResults) continue;
         for (var j = 0; j < fieldResults.length; j++) {
-          var doc = fieldResults[j].doc;
-          flatResults.push(doc);
+          var resultItem = fieldResults[j];
+          if (!resultItem || !resultItem.doc) continue;
+          var doc = resultItem.doc;
+          if (doc.id !== undefined && !seenIds.has(doc.id)) {
+            seenIds.add(doc.id);
+            flatResults.push(doc);
+          }
         }
       }
 
