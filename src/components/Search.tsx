@@ -349,9 +349,11 @@ const searchScript = `
 
     async function initIndex() {
       try {
+        console.log("[Search] Fetching content index...");
         var response = await fetch("/static/contentIndex.json");
         var data = await response.json();
         contentData = data.content || data;
+        console.log("[Search] Content data loaded, entries:", Object.keys(contentData).length);
         
         var id = 0;
         for (var slug in contentData) {
@@ -369,11 +371,13 @@ const searchScript = `
     }
 
     function displayResults(results, term) {
+      console.log("[Search] Displaying", results.length, "results");
       removeAllChildren(resultsContainer);
       currentResults = [];
       currentIndex = -1;
 
       if (!results || results.length === 0) {
+        console.log("[Search] No results to display");
         var noResults = document.createElement("div");
         noResults.className = "result-card";
         noResults.textContent = "No results found";
@@ -452,6 +456,7 @@ const searchScript = `
     }
 
     function performSearch(term) {
+      console.log("[Search] Performing search for:", term);
       if (!term || term.trim() === "") {
         searchLayout.classList.remove("display-results");
         return;
@@ -463,6 +468,7 @@ const searchScript = `
       }
 
       var results = index.search(term, { limit: numSearchResults, enrich: true });
+      console.log("[Search] Raw results:", results);
       var flatResults = [];
       var seenIds = new Set();
       
@@ -485,6 +491,11 @@ const searchScript = `
     }
 
     function openSearch() {
+      console.log("[Search] Opening search modal");
+      if (!searchContainer) {
+        console.error("[Search] Search container not found");
+        return;
+      }
       searchContainer.classList.add("active");
       document.documentElement.classList.add("search-open");
       if (searchBar) {
@@ -506,12 +517,20 @@ const searchScript = `
     }
 
     function setupSearch() {
+      console.log("[Search] Setting up event listeners");
       var searchButtons = document.querySelectorAll(".search-button");
+      console.log("[Search] Found", searchButtons.length, "search buttons");
       for (var i = 0; i < searchButtons.length; i++) {
-        searchButtons[i].addEventListener("click", openSearch);
+        searchButtons[i].addEventListener("click", function(e) {
+          console.log("[Search] Button clicked");
+          e.preventDefault();
+          e.stopPropagation();
+          openSearch();
+        });
       }
 
       searchContainer = document.querySelector(".search-container");
+      console.log("[Search] Search container found:", !!searchContainer);
       if (!searchContainer) return;
 
       searchBar = searchContainer.querySelector(".search-bar");
@@ -567,7 +586,20 @@ const searchScript = `
       });
     }
 
-    initIndex().then(setupSearch);
+    console.log("[Search] Initializing...");
+    initIndex().then(function() {
+      console.log("[Search] Index built, setting up UI");
+      setupSearch();
+      console.log("[Search] Setup complete");
+    }).catch(function(err) {
+      console.error("[Search] Initialization failed:", err);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initSearch);
+  } else {
+    initSearch();
   }
 })();
 `;
