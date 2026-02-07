@@ -2,21 +2,19 @@ import type { VNode, JSX } from "preact";
 
 export interface SearchOptions {
   enablePreview?: boolean;
-  placeholder?: string;
-  title?: string;
 }
 
 export type QuartzComponentProps = {
-  ctx: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  externalResources: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  fileData: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  cfg: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  children: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  tree: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  allFiles: any[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  ctx: any;
+  externalResources: any;
+  fileData: any;
+  cfg: any;
+  children: any;
+  tree: any;
+  allFiles: any[];
   displayClass?: "mobile-only" | "desktop-only";
 } & JSX.IntrinsicAttributes & {
-    [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    [key: string]: any;
   };
 
 export interface QuartzComponent {
@@ -28,8 +26,6 @@ export interface QuartzComponent {
 
 const defaultOptions: SearchOptions = {
   enablePreview: true,
-  placeholder: "Search for something",
-  title: "Search",
 };
 
 function classNames(...classes: (string | undefined | null | false)[]): string {
@@ -235,6 +231,8 @@ const searchCSS = `
   text-align: left;
   outline: none;
   font-weight: inherit;
+  text-decoration: none;
+  color: var(--dark);
 }
 
 .search > .search-container > .search-space > .search-layout > .results-container .result-card:hover,
@@ -245,27 +243,30 @@ const searchCSS = `
 
 .search > .search-container > .search-space > .search-layout > .results-container .result-card > h3 {
   margin: 0;
-}
-
-@media all and not (max-width: 800px) {
-  .search > .search-container > .search-space > .search-layout > .results-container .result-card > p.card-description {
-    display: none;
-  }
+  color: var(--secondary);
 }
 
 .search > .search-container > .search-space > .search-layout > .results-container .result-card > ul.tags {
   margin-top: 0.45rem;
   margin-bottom: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search > .search-container > .search-space > .search-layout > .results-container .result-card > ul.tags > li {
+  display: inline-block;
+  margin-right: 0.3rem;
 }
 
 .search > .search-container > .search-space > .search-layout > .results-container .result-card > ul > li > p {
   border-radius: 8px;
   background-color: var(--highlight);
   padding: 0.2rem 0.4rem;
-  margin: 0 0.1rem;
+  margin: 0;
   line-height: 1.4rem;
   font-weight: 700;
   color: var(--secondary);
+  font-size: 0.85rem;
 }
 
 .search > .search-container > .search-space > .search-layout > .results-container .result-card > ul > li > p.match-tag {
@@ -274,11 +275,22 @@ const searchCSS = `
 
 .search > .search-container > .search-space > .search-layout > .results-container .result-card > p {
   margin-bottom: 0;
+  margin-top: 0.5em;
+  font-size: 0.9em;
+  color: var(--gray);
+}
+
+.search > .search-container > .search-space > .search-layout > .results-container .result-card.no-match {
+  cursor: default;
 }
 `;
 
 const searchScript = `
 (function() {
+  var numSearchResults = 8;
+  var numTagResults = 5;
+  var contextWindowWords = 30;
+  
   function loadScript(src) {
     return new Promise(function(resolve, reject) {
       var script = document.createElement("script");
@@ -302,24 +314,63 @@ const searchScript = `
       return;
     }
 
+    var encoder = function(str) {
+      var tokens = [];
+      var bufferStart = -1;
+      var bufferEnd = -1;
+      var lower = str.toLowerCase();
+      var i = 0;
+      
+      for (var idx = 0; idx < lower.length; idx++) {
+        var code = lower.charCodeAt(idx);
+        var isCJK = (code >= 0x3040 && code <= 0x309f) ||
+                    (code >= 0x30a0 && code <= 0x30ff) ||
+                    (code >= 0x4e00 && code <= 0x9fff) ||
+                    (code >= 0xac00 && code <= 0xd7af);
+        var isWhitespace = code === 32 || code === 9 || code === 10 || code === 13;
+        
+        if (isCJK) {
+          if (bufferStart !== -1) {
+            tokens.push(lower.slice(bufferStart, bufferEnd));
+            bufferStart = -1;
+          }
+          tokens.push(lower.charAt(idx));
+        } else if (isWhitespace) {
+          if (bufferStart !== -1) {
+            tokens.push(lower.slice(bufferStart, bufferEnd));
+            bufferStart = -1;
+          }
+        } else {
+          if (bufferStart === -1) bufferStart = idx;
+          bufferEnd = idx + 1;
+        }
+        i += lower.charAt(idx).length;
+      }
+      
+      if (bufferStart !== -1) {
+        tokens.push(lower.slice(bufferStart));
+      }
+      
+      return tokens;
+    };
+
     var index = new FlexSearch.Document({
+      encode: encoder,
       document: {
         id: "id",
-        index: ["title", "content"]
+        tag: "tags",
+        index: [
+          { field: "title", tokenize: "forward" },
+          { field: "content", tokenize: "forward" },
+          { field: "tags", tokenize: "forward" }
+        ]
       }
     });
 
-    var numSearchResults = 8;
-    var searchContainer = null;
-    var searchBar = null;
-    var searchLayout = null;
-    var resultsContainer = null;
-    var previewContainer = null;
-    var currentResults = [];
-    var currentIndex = -1;
     var contentData = null;
-    var docsById = {};
-    var currentId = 0;
+    var idDataMap = [];
+    var currentSearchTerm = "";
+    var searchType = "basic";
 
     function removeAllChildren(el) {
       while (el.firstChild) {
@@ -327,283 +378,242 @@ const searchScript = `
       }
     }
 
-    function highlightMatch(text, term) {
-      if (!term || !text) return text;
-      var lowerTerm = term.toLowerCase();
-      var lowerText = text.toLowerCase();
-      var result = "";
-      var lastIndex = 0;
-      var index = lowerText.indexOf(lowerTerm);
-      while (index !== -1) {
-        result += text.substring(lastIndex, index);
-        result += '<span class="highlight">' + text.substring(index, index + term.length) + '</span>';
-        lastIndex = index + term.length;
-        index = lowerText.indexOf(lowerTerm, lastIndex);
+    function tokenizeTerm(term) {
+      var tokens = term.split(/\\s+/).filter(function(t) { return t.trim() !== ""; });
+      var tokenLen = tokens.length;
+      if (tokenLen > 1) {
+        for (var i = 1; i < tokenLen; i++) {
+          tokens.push(tokens.slice(0, i + 1).join(" "));
+        }
       }
-      result += text.substring(lastIndex);
-      return result;
+      return tokens.sort(function(a, b) { return b.length - a.length; });
     }
 
-    async function initIndex() {
+    function highlight(searchTerm, text, trim) {
+      var tokenizedTerms = tokenizeTerm(searchTerm);
+      var tokenizedText = text.split(/\\s+/).filter(function(t) { return t !== ""; });
+      
+      var startIndex = 0;
+      var endIndex = tokenizedText.length - 1;
+      
+      if (trim) {
+        var includesCheck = function(tok) {
+          return tokenizedTerms.some(function(term) {
+            return tok.toLowerCase().startsWith(term.toLowerCase());
+          });
+        };
+        var occurrencesIndices = tokenizedText.map(includesCheck);
+        
+        var bestSum = 0;
+        var bestIndex = 0;
+        for (var i = 0; i < Math.max(tokenizedText.length - contextWindowWords, 0); i++) {
+          var window = occurrencesIndices.slice(i, i + contextWindowWords);
+          var windowSum = window.reduce(function(total, cur) { return total + (cur ? 1 : 0); }, 0);
+          if (windowSum >= bestSum) {
+            bestSum = windowSum;
+            bestIndex = i;
+          }
+        }
+        
+        startIndex = Math.max(bestIndex - contextWindowWords / 2, 0);
+        endIndex = Math.min(startIndex + contextWindowWords, tokenizedText.length - 1);
+        tokenizedText = tokenizedText.slice(startIndex, endIndex);
+      }
+      
+      var slice = tokenizedText.map(function(tok) {
+        var result = tok;
+        for (var j = 0; j < tokenizedTerms.length; j++) {
+          var searchTok = tokenizedTerms[j].toLowerCase();
+          var tokLower = tok.toLowerCase();
+          var idx = tokLower.indexOf(searchTok);
+          if (idx !== -1) {
+            var before = tok.substring(0, idx);
+            var match = tok.substring(idx, idx + searchTok.length);
+            var after = tok.substring(idx + searchTok.length);
+            result = before + '<span class="highlight">' + match + '</span>' + after;
+            break;
+          }
+        }
+        return result;
+      }).join(" ");
+      
+      return (startIndex === 0 ? "" : "...") + slice + (endIndex === tokenizedText.length - 1 ? "" : "...");
+    }
+
+    function highlightTags(term, tags) {
+      if (!tags || searchType !== "tags") return [];
+      return tags.map(function(tag) {
+        if (tag.toLowerCase().includes(term.toLowerCase())) {
+          return '<li><p class="match-tag">#' + tag + '</p></li>';
+        } else {
+          return '<li><p>#' + tag + '</p></li>';
+        }
+      }).slice(0, numTagResults);
+    }
+
+    function formatForDisplay(term, id) {
+      var slug = idDataMap[id];
+      var data = contentData[slug];
+      return {
+        id: id,
+        slug: slug,
+        title: searchType === "tags" ? data.title : highlight(term, data.title || ""),
+        content: highlight(term, data.content || "", true),
+        tags: highlightTags(term.substring(1), data.tags)
+      };
+    }
+
+    async function setupSearch() {
+      var searchElements = document.querySelectorAll(".search");
+      
+      for (var i = 0; i < searchElements.length; i++) {
+        var searchEl = searchElements[i];
+        var container = searchEl.querySelector(".search-container");
+        var searchButton = searchEl.querySelector(".search-button");
+        var searchBar = searchEl.querySelector(".search-bar");
+        var searchLayout = searchEl.querySelector(".search-layout");
+        
+        if (!container || !searchButton || !searchBar || !searchLayout) continue;
+        
+        var enablePreview = searchLayout.dataset.preview === "true";
+        var results = document.createElement("div");
+        results.className = "results-container";
+        searchLayout.appendChild(results);
+        
+        var preview = null;
+        if (enablePreview) {
+          preview = document.createElement("div");
+          preview.className = "preview-container";
+          searchLayout.appendChild(preview);
+        }
+
+        function hideSearch() {
+          container.classList.remove("active");
+          searchBar.value = "";
+          removeAllChildren(results);
+          if (preview) removeAllChildren(preview);
+          searchLayout.classList.remove("display-results");
+          searchType = "basic";
+        }
+
+        function showSearch(type) {
+          searchType = type;
+          container.classList.add("active");
+          searchBar.focus();
+        }
+
+        async function displayResults(finalResults) {
+          removeAllChildren(results);
+          
+          if (finalResults.length === 0) {
+            results.innerHTML = '<a class="result-card no-match"><h3>No results.</h3><p>Try another search term?</p></a>';
+          } else {
+            for (var j = 0; j < finalResults.length; j++) {
+              var item = finalResults[j];
+              var htmlTags = item.tags.length > 0 ? '<ul class="tags">' + item.tags.join("") + '</ul>' : '';
+              var itemTile = document.createElement("a");
+              itemTile.className = "result-card";
+              itemTile.id = item.slug;
+              itemTile.href = "/" + item.slug;
+              itemTile.innerHTML = '<h3 class="card-title">' + item.title + '</h3>' + htmlTags + '<p class="card-description">' + item.content + '</p>';
+              itemTile.addEventListener("click", function(e) {
+                if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+                hideSearch();
+              });
+              results.appendChild(itemTile);
+            }
+          }
+        }
+
+        async function onType(e) {
+          currentSearchTerm = e.target.value;
+          searchLayout.classList.toggle("display-results", currentSearchTerm !== "");
+          searchType = currentSearchTerm.startsWith("#") ? "tags" : "basic";
+          
+          var query = currentSearchTerm;
+          var searchResults;
+          
+          if (searchType === "tags") {
+            query = currentSearchTerm.substring(1).trim();
+            searchResults = await index.searchAsync({
+              query: query,
+              limit: numSearchResults,
+              index: ["tags"]
+            });
+          } else {
+            searchResults = await index.searchAsync({
+              query: query,
+              limit: numSearchResults,
+              index: ["title", "content"]
+            });
+          }
+          
+          var allIds = new Set();
+          for (var k = 0; k < searchResults.length; k++) {
+            var fieldResult = searchResults[k];
+            if (fieldResult && fieldResult.result) {
+              for (var m = 0; m < fieldResult.result.length; m++) {
+                allIds.add(fieldResult.result[m]);
+              }
+            }
+          }
+          
+          var finalResults = [];
+          allIds.forEach(function(id) {
+            finalResults.push(formatForDisplay(currentSearchTerm, id));
+          });
+          
+          await displayResults(finalResults.slice(0, numSearchResults));
+        }
+
+        searchButton.addEventListener("click", function() { showSearch("basic"); });
+        searchBar.addEventListener("input", onType);
+        
+        document.addEventListener("keydown", function(e) {
+          if (e.key === "k" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+            e.preventDefault();
+            container.classList.contains("active") ? hideSearch() : showSearch("basic");
+          } else if (e.shiftKey && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+            e.preventDefault();
+            showSearch("tags");
+            searchBar.value = "#";
+          } else if (e.key === "Escape" && container.classList.contains("active")) {
+            hideSearch();
+          }
+        });
+      }
+    }
+
+    async function fillDocument() {
+      var id = 0;
+      for (var slug in contentData) {
+        var fileData = contentData[slug];
+        idDataMap[id] = slug;
+        await index.addAsync(id, {
+          id: id,
+          slug: slug,
+          title: fileData.title || "",
+          content: fileData.content || "",
+          tags: fileData.tags || []
+        });
+        id++;
+      }
+    }
+
+    async function init() {
       try {
-        console.log("[Search] Fetching content index...");
         var response = await fetch("/static/contentIndex.json");
         var data = await response.json();
         contentData = data.content || data;
-        console.log("[Search] Content data loaded, entries:", Object.keys(contentData).length);
-        
-        currentId = 0;
-        for (var slug in contentData) {
-          var item = contentData[slug];
-          var doc = {
-            id: currentId,
-            slug: slug,
-            title: item.title || slug,
-            content: item.content || "",
-            tags: item.tags || []
-          };
-          docsById[currentId] = doc;
-          index.add(doc);
-          currentId++;
-        }
+        await fillDocument();
+        await setupSearch();
       } catch (err) {
-        console.error("[Search] Error loading index:", err);
+        console.error("[Search] Error initializing:", err);
       }
     }
 
-    function displayResults(results, term) {
-      console.log("[Search] Displaying", results.length, "results");
-      removeAllChildren(resultsContainer);
-      currentResults = [];
-      currentIndex = -1;
-
-      if (!results || results.length === 0) {
-        console.log("[Search] No results to display");
-        var noResults = document.createElement("div");
-        noResults.className = "result-card";
-        noResults.textContent = "No results found";
-        resultsContainer.appendChild(noResults);
-        return;
-      }
-
-      for (var i = 0; i < Math.min(results.length, numSearchResults); i++) {
-        var doc = results[i];
-        if (!doc || !doc.slug) continue;
-
-        var card = document.createElement("button");
-        card.className = "result-card";
-        card.dataset.slug = doc.slug;
-        card.dataset.index = i;
-
-        var title = document.createElement("h3");
-        title.innerHTML = highlightMatch(doc.title, term);
-        card.appendChild(title);
-
-        if (doc.tags && doc.tags.length > 0) {
-          var tagsUl = document.createElement("ul");
-          tagsUl.className = "tags";
-          for (var t = 0; t < doc.tags.length; t++) {
-            var tagLi = document.createElement("li");
-            var tagP = document.createElement("p");
-            tagP.textContent = doc.tags[t];
-            tagLi.appendChild(tagP);
-            tagsUl.appendChild(tagLi);
-          }
-          card.appendChild(tagsUl);
-        }
-
-        card.addEventListener("click", function() {
-          window.location.href = "/" + this.dataset.slug;
-        });
-
-        card.addEventListener("mouseenter", function() {
-          currentIndex = parseInt(this.dataset.index);
-          updateFocus();
-          if (previewContainer) {
-            showPreview(this.dataset.slug);
-          }
-        });
-
-        resultsContainer.appendChild(card);
-        currentResults.push(card);
-      }
-    }
-
-    function showPreview(slug) {
-      removeAllChildren(previewContainer);
-      if (!contentData || !contentData[slug]) return;
-      var item = contentData[slug];
-
-      var inner = document.createElement("div");
-      inner.className = "preview-inner";
-      
-      var title = document.createElement("h1");
-      title.textContent = item.title || slug;
-      inner.appendChild(title);
-
-      if (item.content) {
-        var content = document.createElement("div");
-        content.innerHTML = item.content.substring(0, 2000);
-        inner.appendChild(content);
-      }
-
-      previewContainer.appendChild(inner);
-    }
-
-    function updateFocus() {
-      for (var i = 0; i < currentResults.length; i++) {
-        if (i === currentIndex) {
-          currentResults[i].classList.add("focus");
-        } else {
-          currentResults[i].classList.remove("focus");
-        }
-      }
-    }
-
-    function performSearch(term) {
-      console.log("[Search] Performing search for:", term);
-      if (!term || term.trim() === "") {
-        searchLayout.classList.remove("display-results");
-        return;
-      }
-
-      if (!contentData) {
-        console.log("[Search] Content data not loaded yet");
-        return;
-      }
-
-      var results = index.search(term, { limit: numSearchResults });
-      
-      var flatResults = [];
-      var seenIds = new Set();
-      
-      for (var i = 0; i < results.length; i++) {
-        var fieldResult = results[i];
-        if (!fieldResult || !fieldResult.result) continue;
-        
-        for (var j = 0; j < fieldResult.result.length; j++) {
-          var docId = fieldResult.result[j];
-          if (typeof docId !== "number") continue;
-          if (seenIds.has(docId)) continue;
-          
-          seenIds.add(docId);
-          var doc = docsById[docId];
-          if (doc) {
-            flatResults.push(doc);
-          }
-        }
-      }
-
-      searchLayout.classList.add("display-results");
-      displayResults(flatResults, term);
-    }
-
-    function openSearch() {
-      console.log("[Search] Opening search modal");
-      if (!searchContainer) {
-        console.error("[Search] Search container not found");
-        return;
-      }
-      searchContainer.classList.add("active");
-      document.documentElement.classList.add("search-open");
-      if (searchBar) {
-        searchBar.focus();
-        searchBar.value = "";
-      }
-      currentIndex = -1;
-    }
-
-    function closeSearch() {
-      searchContainer.classList.remove("active");
-      document.documentElement.classList.remove("search-open");
-      if (searchBar) {
-        searchBar.value = "";
-        searchBar.blur();
-      }
-      searchLayout.classList.remove("display-results");
-      currentIndex = -1;
-    }
-
-    function setupSearch() {
-      console.log("[Search] Setting up event listeners");
-      var searchButtons = document.querySelectorAll(".search-button");
-      console.log("[Search] Found", searchButtons.length, "search buttons");
-      for (var i = 0; i < searchButtons.length; i++) {
-        searchButtons[i].addEventListener("click", function(e) {
-          console.log("[Search] Button clicked");
-          e.preventDefault();
-          e.stopPropagation();
-          openSearch();
-        });
-      }
-
-      searchContainer = document.querySelector(".search-container");
-      console.log("[Search] Search container found:", !!searchContainer);
-      if (!searchContainer) return;
-
-      searchBar = searchContainer.querySelector(".search-bar");
-      searchLayout = searchContainer.querySelector(".search-layout");
-      resultsContainer = searchContainer.querySelector(".results-container");
-      previewContainer = searchContainer.querySelector(".preview-container");
-
-      if (searchBar) {
-        searchBar.addEventListener("input", function(e) {
-          performSearch(e.target.value);
-        });
-
-        searchBar.addEventListener("keydown", function(e) {
-          if (e.key === "Escape") {
-            closeSearch();
-          } else if (e.key === "ArrowDown") {
-            e.preventDefault();
-            currentIndex = Math.min(currentIndex + 1, currentResults.length - 1);
-            updateFocus();
-            if (currentIndex >= 0 && previewContainer) {
-              showPreview(currentResults[currentIndex].dataset.slug);
-            }
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            currentIndex = Math.max(currentIndex - 1, -1);
-            updateFocus();
-            if (currentIndex >= 0 && previewContainer) {
-              showPreview(currentResults[currentIndex].dataset.slug);
-            }
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            if (currentIndex >= 0 && currentResults[currentIndex]) {
-              window.location.href = "/" + currentResults[currentIndex].dataset.slug;
-            }
-          }
-        });
-      }
-
-      document.addEventListener("click", function(e) {
-        if (e.target.closest(".search-space")) return;
-        closeSearch();
-      });
-
-      document.addEventListener("keydown", function(e) {
-        if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault();
-          if (searchContainer.classList.contains("active")) {
-            closeSearch();
-          } else {
-            openSearch();
-          }
-        }
-      });
-    }
-
-    console.log("[Search] Initializing...");
-    initIndex().then(function() {
-      console.log("[Search] Index built, setting up UI");
-      setupSearch();
-      console.log("[Search] Setup complete");
-    }).catch(function(err) {
-      console.error("[Search] Initialization failed:", err);
-    });
+    init();
   }
-
 })();
 `;
 
@@ -672,10 +682,7 @@ export const Search = (userOpts?: Partial<SearchOptions>) => {
               aria-label={t.placeholder}
               placeholder={t.placeholder}
             />
-            <div class="search-layout" data-preview={enablePreview}>
-              <div class="results-container"></div>
-              {enablePreview && <div class="preview-container"></div>}
-            </div>
+            <div class="search-layout" data-preview={enablePreview}></div>
           </div>
         </div>
       </div>
