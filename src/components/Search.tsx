@@ -318,6 +318,8 @@ const searchScript = `
     var currentResults = [];
     var currentIndex = -1;
     var contentData = null;
+    var docsById = {};
+    var currentId = 0;
 
     function removeAllChildren(el) {
       while (el.firstChild) {
@@ -342,11 +344,6 @@ const searchScript = `
       return result;
     }
 
-    function fetchContent(slug) {
-      if (!contentData) return null;
-      return contentData[slug] || null;
-    }
-
     async function initIndex() {
       try {
         console.log("[Search] Fetching content index...");
@@ -355,15 +352,19 @@ const searchScript = `
         contentData = data.content || data;
         console.log("[Search] Content data loaded, entries:", Object.keys(contentData).length);
         
-        var id = 0;
+        currentId = 0;
         for (var slug in contentData) {
           var item = contentData[slug];
-          index.add({
-            id: id++,
+          var doc = {
+            id: currentId,
             slug: slug,
             title: item.title || slug,
-            content: item.content || ""
-          });
+            content: item.content || "",
+            tags: item.tags || []
+          };
+          docsById[currentId] = doc;
+          index.add(doc);
+          currentId++;
         }
       } catch (err) {
         console.error("[Search] Error loading index:", err);
@@ -386,25 +387,29 @@ const searchScript = `
       }
 
       for (var i = 0; i < Math.min(results.length, numSearchResults); i++) {
-        var result = results[i];
-        if (!result || !result.slug) continue;
-        var item = fetchContent(result.slug);
-        if (!item) continue;
+        var doc = results[i];
+        if (!doc || !doc.slug) continue;
 
         var card = document.createElement("button");
         card.className = "result-card";
-        card.dataset.slug = result.slug;
+        card.dataset.slug = doc.slug;
         card.dataset.index = i;
 
         var title = document.createElement("h3");
-        title.innerHTML = highlightMatch(item.title || result.slug, term);
+        title.innerHTML = highlightMatch(doc.title, term);
         card.appendChild(title);
 
-        if (item.description) {
-          var desc = document.createElement("p");
-          desc.className = "card-description";
-          desc.textContent = item.description;
-          card.appendChild(desc);
+        if (doc.tags && doc.tags.length > 0) {
+          var tagsUl = document.createElement("ul");
+          tagsUl.className = "tags";
+          for (var t = 0; t < doc.tags.length; t++) {
+            var tagLi = document.createElement("li");
+            var tagP = document.createElement("p");
+            tagP.textContent = doc.tags[t];
+            tagLi.appendChild(tagP);
+            tagsUl.appendChild(tagLi);
+          }
+          card.appendChild(tagsUl);
         }
 
         card.addEventListener("click", function() {
@@ -426,8 +431,8 @@ const searchScript = `
 
     function showPreview(slug) {
       removeAllChildren(previewContainer);
-      var item = fetchContent(slug);
-      if (!item) return;
+      if (!contentData || !contentData[slug]) return;
+      var item = contentData[slug];
 
       var inner = document.createElement("div");
       inner.className = "preview-inner";
@@ -468,39 +473,24 @@ const searchScript = `
       }
 
       var results = index.search(term, { limit: numSearchResults });
-      console.log("[Search] Raw results count:", results ? results.length : 0);
       
       var flatResults = [];
       var seenIds = new Set();
-      var idToSlugMap = {};
-      var idCounter = 0;
-      for (var slug in contentData) {
-        idToSlugMap[idCounter++] = slug;
-      }
       
       for (var i = 0; i < results.length; i++) {
         var fieldResult = results[i];
-        var fieldResults = fieldResult.result;
-        if (!fieldResults || !Array.isArray(fieldResults)) continue;
+        if (!fieldResult || !fieldResult.result) continue;
         
-        for (var j = 0; j < fieldResults.length; j++) {
-          var docId = fieldResults[j];
+        for (var j = 0; j < fieldResult.result.length; j++) {
+          var docId = fieldResult.result[j];
           if (typeof docId !== "number") continue;
           if (seenIds.has(docId)) continue;
           
           seenIds.add(docId);
-          var slug = idToSlugMap[docId];
-          if (!slug) continue;
-          
-          var item = contentData[slug];
-          if (!item) continue;
-          
-          flatResults.push({
-            id: docId,
-            slug: slug,
-            title: item.title || slug,
-            description: item.description || ""
-          });
+          var doc = docsById[docId];
+          if (doc) {
+            flatResults.push(doc);
+          }
         }
       }
 
