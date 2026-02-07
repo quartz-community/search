@@ -477,9 +477,11 @@ const searchScript = `
         if (!fieldResults) continue;
         for (var j = 0; j < fieldResults.length; j++) {
           var resultItem = fieldResults[j];
-          if (!resultItem || !resultItem.doc) continue;
-          var doc = resultItem.doc;
-          if (doc.id !== undefined && !seenIds.has(doc.id)) {
+          if (!resultItem) continue;
+          // FlexSearch might return doc directly or nested
+          var doc = resultItem.doc || resultItem;
+          if (!doc || !doc.id) continue;
+          if (!seenIds.has(doc.id)) {
             seenIds.add(doc.id);
             flatResults.push(doc);
           }
@@ -596,11 +598,6 @@ const searchScript = `
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initSearch);
-  } else {
-    initSearch();
-  }
 })();
 `;
 
