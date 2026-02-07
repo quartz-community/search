@@ -328,13 +328,10 @@ const searchScript = `
     function highlightMatch(text, term) {
       if (!term || !text) return text;
       var specialChars = "[.*+?^$" + "{}()|" + "[\\]\\\\]";
-      var escaped = term;
-      for (var i = 0; i < specialChars.length; i++) {
-        var char = specialChars[i];
-        escaped = escaped.split(char).join("\\" + char);
-      }
+      var pattern = new RegExp("[" + specialChars + "]", "g");
+      var escaped = term.replace(pattern, function(m) { return "\\" + m; });
       var regex = new RegExp("(" + escaped + ")", "gi");
-      return text.replace(regex, '<span class="highlight">$1</span>');
+      return text.replace(regex, function(match) { return '<span class="highlight">' + match + '</span>'; });
     }
 
     function fetchContent(slug) {
