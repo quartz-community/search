@@ -79,20 +79,20 @@ let idDataMap: string[] = [];
 
 async function setupSearch() {
   const searchElements = document.querySelectorAll(".search");
-  
+
   for (const searchEl of searchElements) {
     const container = searchEl.querySelector(".search-container");
     const searchButton = searchEl.querySelector(".search-button");
     const searchBar = searchEl.querySelector(".search-bar") as HTMLInputElement;
     const searchLayout = searchEl.querySelector(".search-layout");
-    
+
     if (!container || !searchButton || !searchBar || !searchLayout) continue;
-    
+
     const enablePreview = searchLayout.getAttribute("data-preview") === "true";
     const results = document.createElement("div");
     results.className = "results-container";
     searchLayout.appendChild(results);
-    
+
     let preview: HTMLDivElement | null = null;
     if (enablePreview) {
       preview = document.createElement("div");
@@ -117,17 +117,26 @@ async function setupSearch() {
 
     const displayResults = async (finalResults: any[]) => {
       removeAllChildren(results);
-      
+
       if (finalResults.length === 0) {
-        results.innerHTML = '<a class="result-card no-match"><h3>No results.</h3><p>Try another search term?</p></a>';
+        results.innerHTML =
+          '<a class="result-card no-match"><h3>No results.</h3><p>Try another search term?</p></a>';
       } else {
         for (const item of finalResults) {
-          const htmlTags = item.tags.length > 0 ? '<ul class="tags">' + item.tags.join("") + '</ul>' : '';
+          const htmlTags =
+            item.tags.length > 0 ? '<ul class="tags">' + item.tags.join("") + "</ul>" : "";
           const itemTile = document.createElement("a");
           itemTile.className = "result-card";
           itemTile.id = item.slug;
           itemTile.href = "/" + item.slug;
-          itemTile.innerHTML = '<h3 class="card-title">' + item.title + '</h3>' + htmlTags + '<p class="card-description">' + item.content + '</p>';
+          itemTile.innerHTML =
+            '<h3 class="card-title">' +
+            item.title +
+            "</h3>" +
+            htmlTags +
+            '<p class="card-description">' +
+            item.content +
+            "</p>";
           itemTile.addEventListener("click", (e) => {
             if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
             hideSearch();
@@ -141,10 +150,10 @@ async function setupSearch() {
       currentSearchTerm = (e.target as HTMLInputElement).value;
       searchLayout.classList.toggle("display-results", currentSearchTerm !== "");
       searchType = currentSearchTerm.startsWith("#") ? "tags" : "basic";
-      
+
       const query = currentSearchTerm;
       let searchResults: any[];
-      
+
       if (searchType === "tags") {
         const tagQuery = currentSearchTerm.substring(1).trim();
         searchResults = await index.searchAsync({
@@ -159,7 +168,7 @@ async function setupSearch() {
           index: ["title", "content"],
         });
       }
-      
+
       const allIds = new Set<number>();
       for (const fieldResult of searchResults) {
         if (fieldResult && fieldResult.result) {
@@ -168,18 +177,18 @@ async function setupSearch() {
           }
         }
       }
-      
+
       const finalResults: any[] = [];
       allIds.forEach((id) => {
         finalResults.push(formatForDisplay(currentSearchTerm, id));
       });
-      
+
       await displayResults(finalResults.slice(0, numSearchResults));
     };
 
     searchButton.addEventListener("click", () => showSearch("basic"));
     searchBar.addEventListener("input", onType);
-    
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "k" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
         e.preventDefault();
@@ -209,18 +218,16 @@ function tokenizeTerm(term: string): string[] {
 function highlight(searchTerm: string, text: string, trim?: boolean): string {
   const tokenizedTerms = tokenizeTerm(searchTerm);
   const tokenizedText = text.split(/\s+/).filter((t) => t !== "");
-  
+
   let startIndex = 0;
   let endIndex = tokenizedText.length - 1;
-  
+
   if (trim) {
     const includesCheck = (tok: string) => {
-      return tokenizedTerms.some((term) =>
-        tok.toLowerCase().startsWith(term.toLowerCase()),
-      );
+      return tokenizedTerms.some((term) => tok.toLowerCase().startsWith(term.toLowerCase()));
     };
     const occurrencesIndices = tokenizedText.map(includesCheck);
-    
+
     let bestSum = 0;
     let bestIndex = 0;
     for (let i = 0; i < Math.max(tokenizedText.length - contextWindowWords, 0); i++) {
@@ -231,11 +238,11 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
         bestIndex = i;
       }
     }
-    
+
     startIndex = Math.max(bestIndex - contextWindowWords / 2, 0);
     endIndex = Math.min(startIndex + contextWindowWords, tokenizedText.length - 1);
   }
-  
+
   const slice = tokenizedText
     .map((tok) => {
       let result = tok;
@@ -249,8 +256,10 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
       return result;
     })
     .join(" ");
-  
-  return (startIndex === 0 ? "" : "...") + slice + (endIndex === tokenizedText.length - 1 ? "" : "...");
+
+  return (
+    (startIndex === 0 ? "" : "...") + slice + (endIndex === tokenizedText.length - 1 ? "" : "...")
+  );
 }
 
 function highlightTags(term: string, tags?: string[]): string[] {
@@ -294,9 +303,14 @@ async function fillDocument() {
   }
 }
 
+async function fetchContentIndex(): Promise<Record<string, Item>> {
+  const response = await fetch("/static/contentIndex.json");
+  const data = await response.json();
+  return data.content || data;
+}
+
 async function init() {
-  const data = await fetchData(contentIndex);
-  contentData = data.content || data;
+  contentData = await fetchContentIndex();
   await fillDocument();
   await setupSearch();
 }
