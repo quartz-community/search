@@ -1,1 +1,2 @@
-export { Search, type SearchOptions } from "./Search";
+export { default as Search } from "./Search";
+export type { SearchOptions } from "@quartz-community/types";
