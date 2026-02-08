@@ -2,13 +2,16 @@ import type {
   QuartzComponent,
   QuartzComponentProps,
   QuartzComponentConstructor,
-  SearchOptions,
 } from "@quartz-community/types";
 import { classNames } from "../util/lang";
 import { i18n } from "../i18n";
 import style from "./styles/search.scss";
 // @ts-ignore
 import script from "./scripts/search.inline.ts";
+
+export interface SearchOptions {
+  enablePreview: boolean;
+}
 
 const defaultOptions: SearchOptions = {
   enablePreview: true,
