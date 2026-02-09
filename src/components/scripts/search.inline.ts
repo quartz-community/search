@@ -536,11 +536,6 @@ document.addEventListener("nav", async () => {
   console.log("[Search] Nav event received");
   runCleanups();
   await initIndex();
-  await setupSearch();
-});
-
-console.log("[Search] Initial setup starting");
-initIndex().then(() => {
   console.log("[Search] Index initialized, setting up search");
-  setupSearch();
+  await setupSearch();
 });
