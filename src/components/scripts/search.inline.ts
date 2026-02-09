@@ -1,5 +1,9 @@
 import FlexSearch from "flexsearch";
-import { removeAllChildren, normalizeRelativeURLs } from "@quartz-community/utils";
+import {
+  removeAllChildren,
+  normalizeRelativeURLs,
+  registerEscapeHandler,
+} from "@quartz-community/utils";
 
 interface Item {
   id: number;
@@ -95,11 +99,22 @@ async function fetchContent(slug: string): Promise<Element[]> {
   return contents;
 }
 
+const cleanupFns: Array<() => void> = [];
+
+function addCleanup(fn: () => void) {
+  cleanupFns.push(fn);
+}
+
+function runCleanups() {
+  cleanupFns.forEach((fn) => fn());
+  cleanupFns.length = 0;
+}
+
 async function setupSearch() {
   const searchElements = document.querySelectorAll(".search");
 
   for (const searchEl of Array.from(searchElements)) {
-    const container = searchEl.querySelector(".search-container");
+    const container = searchEl.querySelector(".search-container") as HTMLElement | null;
     const searchButton = searchEl.querySelector(".search-button");
     const searchBar = searchEl.querySelector(".search-bar") as HTMLInputElement;
     const searchLayout = searchEl.querySelector(".search-layout");
@@ -107,12 +122,16 @@ async function setupSearch() {
     if (!container || !searchButton || !searchBar || !searchLayout) continue;
 
     const enablePreview = searchLayout.getAttribute("data-preview") === "true";
-    const results = document.createElement("div");
-    results.className = "results-container";
-    searchLayout.appendChild(results);
 
-    let preview: HTMLDivElement | null = null;
-    if (enablePreview) {
+    let results = searchLayout.querySelector(".results-container") as HTMLDivElement | null;
+    if (!results) {
+      results = document.createElement("div");
+      results.className = "results-container";
+      searchLayout.appendChild(results);
+    }
+
+    let preview = searchLayout.querySelector(".preview-container") as HTMLDivElement | null;
+    if (enablePreview && !preview) {
       preview = document.createElement("div");
       preview.className = "preview-container";
       searchLayout.appendChild(preview);
@@ -124,7 +143,7 @@ async function setupSearch() {
     const hideSearch = () => {
       container.classList.remove("active");
       searchBar.value = "";
-      removeAllChildren(results);
+      removeAllChildren(results!);
       if (preview) removeAllChildren(preview);
       searchLayout.classList.remove("display-results");
       searchType = "basic";
@@ -281,9 +300,14 @@ async function setupSearch() {
       setFocus(resultElements[0] ?? null);
     };
 
-    searchButton.addEventListener("click", () => showSearch("basic"));
+    const onButtonClick = () => showSearch("basic");
+    searchButton.addEventListener("click", onButtonClick);
+    addCleanup(() => searchButton.removeEventListener("click", onButtonClick));
+
     searchBar.addEventListener("input", onType);
-    searchBar.addEventListener("keydown", (e) => {
+    addCleanup(() => searchBar.removeEventListener("input", onType));
+
+    const onSearchBarKeydown = (e: KeyboardEvent) => {
       if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
         e.preventDefault();
         focusPrevious();
@@ -297,12 +321,15 @@ async function setupSearch() {
       if (e.key === "Enter") {
         const focused = currentHover;
         if (focused instanceof HTMLAnchorElement) {
+          hideSearch();
           window.location.href = focused.href;
         }
       }
-    });
+    };
+    searchBar.addEventListener("keydown", onSearchBarKeydown);
+    addCleanup(() => searchBar.removeEventListener("keydown", onSearchBarKeydown));
 
-    document.addEventListener("keydown", (e) => {
+    const onDocumentKeydown = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
         e.preventDefault();
         container.classList.contains("active") ? hideSearch() : showSearch("basic");
@@ -310,10 +337,13 @@ async function setupSearch() {
         e.preventDefault();
         showSearch("tags");
         searchBar.value = "#";
-      } else if (e.key === "Escape" && container.classList.contains("active")) {
-        hideSearch();
       }
-    });
+    };
+    document.addEventListener("keydown", onDocumentKeydown);
+    addCleanup(() => document.removeEventListener("keydown", onDocumentKeydown));
+
+    const cleanupEscapeHandler = registerEscapeHandler(container, hideSearch);
+    addCleanup(cleanupEscapeHandler);
   }
 }
 
@@ -484,10 +514,19 @@ async function fetchContentIndex(): Promise<Record<string, Item>> {
   return data.content || data;
 }
 
-async function init() {
+let indexInitialized = false;
+
+async function initIndex() {
+  if (indexInitialized) return;
   contentData = await fetchContentIndex();
   await fillDocument();
-  await setupSearch();
+  indexInitialized = true;
 }
 
-init();
+document.addEventListener("nav", async () => {
+  runCleanups();
+  await initIndex();
+  await setupSearch();
+});
+
+initIndex().then(() => setupSearch());
