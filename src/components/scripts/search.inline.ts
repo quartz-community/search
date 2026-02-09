@@ -141,6 +141,7 @@ async function setupSearch() {
     let previewToken = 0;
 
     const hideSearch = () => {
+      console.log("[Search] hideSearch called");
       container.classList.remove("active");
       searchBar.value = "";
       removeAllChildren(results!);
@@ -151,6 +152,7 @@ async function setupSearch() {
     };
 
     const showSearch = (type: SearchType) => {
+      console.log("[Search] showSearch called", type);
       searchType = type;
       container.classList.add("active");
       searchBar.focus();
@@ -300,9 +302,13 @@ async function setupSearch() {
       setFocus(resultElements[0] ?? null);
     };
 
-    const onButtonClick = () => showSearch("basic");
+    const onButtonClick = () => {
+      console.log("[Search] Button clicked");
+      showSearch("basic");
+    };
     searchButton.addEventListener("click", onButtonClick);
     addCleanup(() => searchButton.removeEventListener("click", onButtonClick));
+    console.log("[Search] Setup complete for element", searchEl);
 
     searchBar.addEventListener("input", onType);
     addCleanup(() => searchBar.removeEventListener("input", onType));
@@ -342,7 +348,10 @@ async function setupSearch() {
     document.addEventListener("keydown", onDocumentKeydown);
     addCleanup(() => document.removeEventListener("keydown", onDocumentKeydown));
 
-    const cleanupEscapeHandler = registerEscapeHandler(container, hideSearch);
+    const cleanupEscapeHandler = registerEscapeHandler(container, () => {
+      console.log("[Search] Escape handler triggered");
+      hideSearch();
+    });
     addCleanup(cleanupEscapeHandler);
   }
 }
@@ -524,9 +533,14 @@ async function initIndex() {
 }
 
 document.addEventListener("nav", async () => {
+  console.log("[Search] Nav event received");
   runCleanups();
   await initIndex();
   await setupSearch();
 });
 
-initIndex().then(() => setupSearch());
+console.log("[Search] Initial setup starting");
+initIndex().then(() => {
+  console.log("[Search] Index initialized, setting up search");
+  setupSearch();
+});
