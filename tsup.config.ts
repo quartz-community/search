@@ -40,7 +40,6 @@ export default defineConfig({
             target: "es2022",
             minify: false,
             platform: "browser",
-            external: ["flexsearch"],
           });
           const code = result.outputFiles?.[0]?.text ?? "";
           return {
