@@ -141,6 +141,7 @@ async function setupSearch() {
     let previewToken = 0;
 
     const hideSearch = () => {
+      console.log("[Search] hideSearch called, stack:", new Error().stack);
       container.classList.remove("active");
       searchBar.value = "";
       removeAllChildren(results!);
@@ -151,9 +152,15 @@ async function setupSearch() {
     };
 
     const showSearch = (type: SearchType) => {
+      console.log("[Search] showSearch called, type:", type);
       searchType = type;
       container.classList.add("active");
+      console.log("[Search] container.classList after add:", container.classList.toString());
       searchBar.focus();
+      console.log(
+        "[Search] focus called, container active:",
+        container.classList.contains("active"),
+      );
     };
 
     const displayResults = async (finalResults: any[]) => {
@@ -300,7 +307,14 @@ async function setupSearch() {
       setFocus(resultElements[0] ?? null);
     };
 
-    const onButtonClick = () => {
+    const onButtonClick = (e: Event) => {
+      console.log(
+        "[Search] Button click event, target:",
+        e.target,
+        "currentTarget:",
+        e.currentTarget,
+      );
+      e.stopPropagation();
       showSearch("basic");
     };
     searchButton.addEventListener("click", onButtonClick);
