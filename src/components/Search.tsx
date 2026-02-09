@@ -6,7 +6,7 @@ import type {
 import { classNames } from "../util/lang";
 import { i18n } from "../i18n";
 import style from "./styles/search.scss";
-// @ts-ignore
+// @ts-expect-error - inline script imported as string by esbuild loader
 import script from "./scripts/search.inline.ts";
 
 export interface SearchOptions {
