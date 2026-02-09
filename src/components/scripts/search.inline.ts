@@ -1,4 +1,3 @@
-// @ts-expect-error flexsearch lacks types in this repo
 import FlexSearch from "flexsearch";
 import { removeAllChildren, normalizeRelativeURLs } from "@quartz-community/utils";
 
