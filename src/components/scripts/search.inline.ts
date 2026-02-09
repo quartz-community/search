@@ -1,5 +1,6 @@
+// @ts-expect-error flexsearch lacks types in this repo
 import FlexSearch from "flexsearch";
-import { removeAllChildren } from "../util";
+import { removeAllChildren, normalizeRelativeURLs } from "@quartz-community/utils";
 
 interface Item {
   id: number;
@@ -76,11 +77,29 @@ const index = new FlexSearch.Document({
 
 let contentData: Record<string, Item> | null = null;
 let idDataMap: string[] = [];
+const fetchContentCache = new Map<string, Element[]>();
+const parser = new DOMParser();
+
+async function fetchContent(slug: string): Promise<Element[]> {
+  if (fetchContentCache.has(slug)) {
+    return fetchContentCache.get(slug) as Element[];
+  }
+  const targetUrl = new URL("/" + slug, window.location.origin).toString();
+  const contents = await fetch(targetUrl)
+    .then((res) => res.text())
+    .then((contents) => {
+      const html = parser.parseFromString(contents ?? "", "text/html");
+      normalizeRelativeURLs(html, targetUrl);
+      return Array.from(html.getElementsByClassName("popover-hint"));
+    });
+  fetchContentCache.set(slug, contents);
+  return contents;
+}
 
 async function setupSearch() {
   const searchElements = document.querySelectorAll(".search");
 
-  for (const searchEl of searchElements) {
+  for (const searchEl of Array.from(searchElements)) {
     const container = searchEl.querySelector(".search-container");
     const searchButton = searchEl.querySelector(".search-button");
     const searchBar = searchEl.querySelector(".search-bar") as HTMLInputElement;
@@ -100,6 +119,9 @@ async function setupSearch() {
       searchLayout.appendChild(preview);
     }
 
+    let currentHover: HTMLElement | null = null;
+    let previewToken = 0;
+
     const hideSearch = () => {
       container.classList.remove("active");
       searchBar.value = "";
@@ -107,6 +129,7 @@ async function setupSearch() {
       if (preview) removeAllChildren(preview);
       searchLayout.classList.remove("display-results");
       searchType = "basic";
+      currentHover = null;
     };
 
     const showSearch = (type: SearchType) => {
@@ -121,6 +144,8 @@ async function setupSearch() {
       if (finalResults.length === 0) {
         results.innerHTML =
           '<a class="result-card no-match"><h3>No results.</h3><p>Try another search term?</p></a>';
+        currentHover = null;
+        if (preview) removeAllChildren(preview);
       } else {
         for (const item of finalResults) {
           const htmlTags =
@@ -141,15 +166,84 @@ async function setupSearch() {
             if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
             hideSearch();
           });
+          itemTile.addEventListener("mouseenter", () => {
+            setFocus(itemTile);
+          });
           results.appendChild(itemTile);
         }
       }
+    };
+
+    const getResultElements = (): HTMLElement[] => {
+      return Array.from(results.querySelectorAll<HTMLElement>(".result-card:not(.no-match)"));
+    };
+
+    const highlightTerm = () => {
+      return searchType === "tags" ? currentSearchTerm.substring(1).trim() : currentSearchTerm;
+    };
+
+    const updatePreview = async (el: HTMLElement | null) => {
+      if (!preview) return;
+      removeAllChildren(preview);
+      if (!el) return;
+      const slug = el.id;
+      const token = ++previewToken;
+      const contents = await fetchContent(slug);
+      if (token !== previewToken) return;
+      const term = highlightTerm();
+      for (const contentEl of contents) {
+        const cloned = contentEl.cloneNode(true) as HTMLElement;
+        if (term.trim() !== "") {
+          cloned.innerHTML = highlightHTML(term, cloned);
+        }
+        preview.appendChild(cloned);
+      }
+    };
+
+    const setFocus = (el: HTMLElement | null) => {
+      if (currentHover) currentHover.classList.remove("focus");
+      currentHover = el;
+      if (currentHover) currentHover.classList.add("focus");
+      updatePreview(currentHover);
+    };
+
+    const focusByIndex = (index: number) => {
+      const resultElements = getResultElements();
+      if (resultElements.length === 0) {
+        setFocus(null);
+        return;
+      }
+      const clamped = Math.min(Math.max(index, 0), resultElements.length - 1);
+      setFocus(resultElements[clamped] ?? null);
+    };
+
+    const focusNext = () => {
+      const resultElements = getResultElements();
+      if (resultElements.length === 0) return;
+      const currentIndex = currentHover ? resultElements.indexOf(currentHover) : -1;
+      focusByIndex(currentIndex + 1);
+    };
+
+    const focusPrevious = () => {
+      const resultElements = getResultElements();
+      if (resultElements.length === 0) return;
+      const currentIndex = currentHover
+        ? resultElements.indexOf(currentHover)
+        : resultElements.length;
+      focusByIndex(currentIndex - 1);
     };
 
     const onType = async (e: Event) => {
       currentSearchTerm = (e.target as HTMLInputElement).value;
       searchLayout.classList.toggle("display-results", currentSearchTerm !== "");
       searchType = currentSearchTerm.startsWith("#") ? "tags" : "basic";
+
+      if (currentSearchTerm === "") {
+        removeAllChildren(results);
+        if (preview) removeAllChildren(preview);
+        currentHover = null;
+        return;
+      }
 
       const query = currentSearchTerm;
       let searchResults: any[];
@@ -184,10 +278,30 @@ async function setupSearch() {
       });
 
       await displayResults(finalResults.slice(0, numSearchResults));
+      const resultElements = getResultElements();
+      setFocus(resultElements[0] ?? null);
     };
 
     searchButton.addEventListener("click", () => showSearch("basic"));
     searchBar.addEventListener("input", onType);
+    searchBar.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
+        e.preventDefault();
+        focusPrevious();
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "Tab") {
+        e.preventDefault();
+        focusNext();
+        return;
+      }
+      if (e.key === "Enter") {
+        const focused = currentHover;
+        if (focused instanceof HTMLAnchorElement) {
+          window.location.href = focused.href;
+        }
+      }
+    });
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "k" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
@@ -213,6 +327,48 @@ function tokenizeTerm(term: string): string[] {
     }
   }
   return tokens.sort((a, b) => b.length - a.length);
+}
+
+function highlightHTML(searchTerm: string, el: HTMLElement): string {
+  const tokenizedTerms = tokenizeTerm(searchTerm).filter((term) => term.trim() !== "");
+  if (tokenizedTerms.length === 0) return el.innerHTML;
+  const html = parser.parseFromString(el.innerHTML, "text/html");
+  const combined = tokenizedTerms
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  if (combined === "") return el.innerHTML;
+  const regex = new RegExp(combined, "gi");
+  const walker = html.createTreeWalker(html.body, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  let node: Text | null = walker.nextNode() as Text | null;
+  while (node) {
+    nodes.push(node);
+    node = walker.nextNode() as Text | null;
+  }
+  for (const textNode of nodes) {
+    const text = textNode.nodeValue ?? "";
+    regex.lastIndex = 0;
+    if (!regex.test(text)) continue;
+    regex.lastIndex = 0;
+    const fragment = html.createDocumentFragment();
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        fragment.appendChild(html.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      const span = html.createElement("span");
+      span.className = "highlight";
+      span.textContent = match[0];
+      fragment.appendChild(span);
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+      fragment.appendChild(html.createTextNode(text.slice(lastIndex)));
+    }
+    textNode.parentNode?.replaceChild(fragment, textNode);
+  }
+  return html.body.innerHTML;
 }
 
 function highlight(searchTerm: string, text: string, trim?: boolean): string {
@@ -277,7 +433,25 @@ function highlightTags(term: string, tags?: string[]): string[] {
 
 function formatForDisplay(term: string, id: number): any {
   const slug = idDataMap[id];
-  const data = contentData![slug];
+  if (!slug || !contentData) {
+    return {
+      id,
+      slug: "",
+      title: "",
+      content: "",
+      tags: [],
+    };
+  }
+  const data = contentData[slug];
+  if (!data) {
+    return {
+      id,
+      slug,
+      title: "",
+      content: "",
+      tags: [],
+    };
+  }
   return {
     id: id,
     slug: slug,
@@ -288,9 +462,11 @@ function formatForDisplay(term: string, id: number): any {
 }
 
 async function fillDocument() {
+  if (!contentData) return;
   let id = 0;
-  for (const slug in contentData) {
-    const fileData = contentData![slug];
+  for (const slug of Object.keys(contentData)) {
+    const fileData = contentData[slug];
+    if (!fileData) continue;
     idDataMap[id] = slug;
     await index.addAsync(id, {
       id: id,

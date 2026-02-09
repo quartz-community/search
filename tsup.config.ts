@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import * as esbuild from "esbuild";
 
 export default defineConfig({
   entry: {
@@ -31,11 +32,20 @@ export default defineConfig({
         });
 
         build.onLoad({ filter: /\.inline\.ts$/ }, async (args) => {
-          const fs = await import("fs");
-          const text = await fs.promises.readFile(args.path, "utf8");
+          const result = await esbuild.build({
+            entryPoints: [args.path],
+            bundle: true,
+            write: false,
+            format: "iife",
+            target: "es2022",
+            minify: false,
+            platform: "browser",
+            external: ["flexsearch"],
+          });
+          const code = result.outputFiles?.[0]?.text ?? "";
           return {
-            contents: text,
-            loader: "text",
+            contents: `export default ${JSON.stringify(code)};`,
+            loader: "ts",
           };
         });
       },

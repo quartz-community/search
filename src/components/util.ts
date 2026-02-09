@@ -1,5 +1,1 @@
-export function removeAllChildren(el: HTMLElement): void {
-  while (el.firstChild) {
-    el.removeChild(el.firstChild);
-  }
-}
+export { removeAllChildren } from "@quartz-community/utils";
