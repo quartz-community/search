@@ -65,7 +65,7 @@
     }
   },
   "dependencies": {
-    "@quartz-community/types": "github:quartz-community/types",
+    "@quartz-community/types": "file:../types",
     "@quartz-community/utils": "github:quartz-community/utils",
     "flexsearch": "^0.8.212"
   },

@@ -20,7 +20,8 @@ const defaultOptions: SearchOptions = {
 export default ((userOpts?: Partial<SearchOptions>) => {
   const Search: QuartzComponent = ({ displayClass, cfg }: QuartzComponentProps) => {
     const opts = { ...defaultOptions, ...userOpts };
-    const searchPlaceholder = i18n(cfg.locale).components.search.searchBarPlaceholder;
+    const locale = cfg.locale ?? "en-US";
+    const searchPlaceholder = i18n(locale).components.search.searchBarPlaceholder;
 
     return (
       <div class={classNames(displayClass, "search")}>
@@ -32,7 +33,7 @@ export default ((userOpts?: Partial<SearchOptions>) => {
               <circle cx="8" cy="8" r="7" />
             </g>
           </svg>
-          <p>{i18n(cfg.locale).components.search.title}</p>
+          <p>{i18n(locale).components.search.title}</p>
         </button>
         <div class="search-container">
           <div class="search-space">
