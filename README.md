@@ -2,8 +2,6 @@
 
 The Search component for Quartz - full-text search with FlexSearch integration.
 
-This is a first-party community plugin for Quartz, demonstrating the new plugin system that allows components to be distributed as npm packages. It provides instant full-text search across your content using FlexSearch for fast indexing and retrieval.
-
 ## Features
 
 - 🔍 **Full-Text Search** - Search across all your content instantly
@@ -16,69 +14,34 @@ This is a first-party community plugin for Quartz, demonstrating the new plugin 
 
 ## Installation
 
-### From GitHub (Recommended for now)
-
 ```bash
-npm install github:quartz-community/search --legacy-peer-deps
-```
-
-### From NPM (when published)
-
-```bash
-npm install @quartz-community/search
+npx quartz plugin add github:quartz-community/search
 ```
 
 ## Usage
 
-### 1. Configure in quartz.config.ts
-
-Add the plugin to your externalPlugins array:
-
-```typescript
-// quartz.config.ts
-import { QuartzConfig } from "./quartz/cfg";
-
-const config: QuartzConfig = {
-  configuration: {
-    // ... your configuration
-  },
-  plugins: {
-    // ... your existing plugins
-  },
-  externalPlugins: ["@quartz-community/search"],
-};
-
-export default config;
+```yaml title="quartz.config.yaml"
+plugins:
+  - source: github:quartz-community/search
+    enabled: true
+    layout:
+      position: left
+      priority: 20
+      group: toolbar
+      groupOptions:
+        grow: true
 ```
 
-### 2. Import in your layout
+For advanced use cases, you can override in TypeScript:
 
-```typescript
-// quartz.layout.ts
-import { Search } from "@quartz-community/search";
+```ts title="quartz.ts (override)"
+import * as ExternalPlugin from "./.quartz/plugins";
 
-// Create the Search component once
-const searchComponent = Search({
+ExternalPlugin.Search({
   enablePreview: true,
   placeholder: "Search for something",
   title: "Search",
 });
-
-export const defaultContentPageLayout: PageLayout = {
-  // ... other layout config
-  left: [
-    searchComponent,
-    // ... other components
-  ],
-};
-
-export const defaultListPageLayout: PageLayout = {
-  // ... other layout config
-  left: [
-    searchComponent, // Reuse the same component instance
-    // ... other components
-  ],
-};
 ```
 
 ## Configuration Options
@@ -140,6 +103,10 @@ npm run build
 ```
 
 The `prepare` script automatically builds during installation.
+
+## Documentation
+
+See the [Quartz documentation](https://quartz.jzhao.xyz/features/full-text%20search) for more information.
 
 ## License
 
