@@ -539,8 +539,11 @@ async function initIndex() {
   indexInitialized = true;
 }
 
-document.addEventListener("nav", async () => {
+async function handleNavOrRender() {
   runCleanups();
   await initIndex();
   await setupSearch();
-});
+}
+
+document.addEventListener("nav", handleNavOrRender);
+document.addEventListener("render", handleNavOrRender);
