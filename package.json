@@ -53,8 +53,8 @@
   },
   "peerDependencies": {
     "@jackyzha0/quartz": "^4.5.2",
-    "preact": "^10.0.0",
-    "flexsearch": "^0.8.212"
+    "flexsearch": "^0.8.212",
+    "preact": "^10.0.0"
   },
   "peerDependenciesMeta": {
     "@jackyzha0/quartz": {
@@ -64,7 +64,7 @@
       "optional": false
     },
     "flexsearch": {
-      "optional": true
+      "optional": false
     }
   },
   "dependencies": {
@@ -80,12 +80,15 @@
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
+    "flexsearch": "^0.8.212",
+    "github-slugger": "^2.0.0",
+    "hast-util-to-jsx-runtime": "^2.3.6",
     "preact": "^10.28.2",
     "prettier": "^3.6.2",
     "sass": "^1.97.3",
-    "vitest": "^2.1.9",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=22",
