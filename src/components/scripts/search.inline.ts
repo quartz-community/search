@@ -525,9 +525,8 @@ async function fillDocument() {
 }
 
 async function fetchContentIndex(): Promise<Record<string, Item>> {
-  const response = await fetch("/static/contentIndex.json");
-  const data = await response.json();
-  return data.content || data;
+  const data = await fetchData;
+  return data as unknown as Record<string, Item>;
 }
 
 let indexInitialized = false;

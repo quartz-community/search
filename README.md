@@ -73,7 +73,7 @@ By default, the search component:
 The Search component:
 
 1. Loads FlexSearch library from CDN when initialized
-2. Fetches content data from `/static/contentIndex.json`
+2. Fetches content data via the `fetchData` global (resolves `contentIndex.json` with the correct base path)
 3. Builds a search index from your content
 4. Performs real-time search as you type
 5. Shows results with optional content preview
