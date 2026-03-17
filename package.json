@@ -53,7 +53,6 @@
   },
   "peerDependencies": {
     "@jackyzha0/quartz": "^4.5.2",
-    "flexsearch": "^0.8.212",
     "preact": "^10.0.0"
   },
   "peerDependenciesMeta": {
@@ -61,9 +60,6 @@
       "optional": true
     },
     "preact": {
-      "optional": false
-    },
-    "flexsearch": {
       "optional": false
     }
   },
