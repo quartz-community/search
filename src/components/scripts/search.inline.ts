@@ -3,6 +3,7 @@ import {
   removeAllChildren,
   normalizeRelativeURLs,
   registerEscapeHandler,
+  resolveBasePath,
 } from "@quartz-community/utils";
 
 interface Item {
@@ -87,7 +88,7 @@ async function fetchContent(slug: string): Promise<Element[]> {
   if (fetchContentCache.has(slug)) {
     return fetchContentCache.get(slug) as Element[];
   }
-  const targetUrl = new URL("/" + slug, window.location.origin).toString();
+  const targetUrl = new URL(resolveBasePath(slug), window.location.origin).toString();
   const contents = await fetch(targetUrl)
     .then((res) => res.text())
     .then((contents) => {
@@ -178,7 +179,7 @@ async function setupSearch() {
           const itemTile = document.createElement("a");
           itemTile.className = "result-card";
           itemTile.id = item.slug;
-          itemTile.href = "/" + item.slug;
+          itemTile.href = resolveBasePath(item.slug);
           itemTile.innerHTML =
             '<h3 class="card-title">' +
             item.title +
