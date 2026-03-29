@@ -382,7 +382,10 @@ async function setupSearch() {
     const setFocus = (el: HTMLElement | null) => {
       if (currentHover) currentHover.classList.remove("focus");
       currentHover = el;
-      if (currentHover) currentHover.classList.add("focus");
+      if (currentHover) {
+        currentHover.classList.add("focus");
+        currentHover.scrollIntoView({ block: "nearest" });
+      }
       if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
       previewDebounceTimer = setTimeout(() => updatePreview(currentHover), 150);
     };
