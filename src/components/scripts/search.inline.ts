@@ -150,6 +150,7 @@ async function setupSearch() {
 
     if (!container || !searchButton || !searchBar || !searchLayout) continue;
 
+    const sidebar = container.closest(".sidebar") as HTMLElement | null;
     const enablePreview = searchLayout.getAttribute("data-preview") === "true";
     const fieldPriorityAttr = searchLayout.getAttribute("data-field-priority");
     const fieldPriority: string[] = fieldPriorityAttr
@@ -280,6 +281,7 @@ async function setupSearch() {
 
     const hideSearch = () => {
       container.classList.remove("active");
+      if (sidebar) sidebar.style.zIndex = "";
       searchButton.setAttribute("aria-expanded", "false");
       searchBar.value = "";
       removeAllChildren(results!);
@@ -293,6 +295,7 @@ async function setupSearch() {
 
     const showSearch = (type: SearchType) => {
       searchType = type;
+      if (sidebar) sidebar.style.zIndex = "auto";
       container.classList.add("active");
       searchButton.setAttribute("aria-expanded", "true");
       searchBar.focus();
@@ -823,17 +826,46 @@ function scrollToSearchTerm() {
   sessionStorage.removeItem("search-term");
 
   requestAnimationFrame(() => {
-    const contentEl =
-      document.querySelector(".popover-hint") ?? document.querySelector("article") ?? document.body;
-    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
-    let node: Text | null;
-    while ((node = walker.nextNode() as Text | null)) {
-      const text = node.nodeValue ?? "";
+    const candidates = document.querySelectorAll(
+      ".popover-hint p, .popover-hint li, .popover-hint h1, .popover-hint h2, " +
+        ".popover-hint h3, .popover-hint h4, .popover-hint h5, .popover-hint h6, " +
+        ".popover-hint td, .popover-hint th, .popover-hint blockquote, " +
+        "article p, article li, article h1, article h2, article h3",
+    );
+
+    for (const el of Array.from(candidates)) {
+      const text = el.textContent ?? "";
       const idx = text.toLowerCase().indexOf(term.toLowerCase());
-      if (idx !== -1) {
+      if (idx === -1) continue;
+
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let charCount = 0;
+      let node: Text | null;
+      let startNode: Text | null = null;
+      let startOffset = 0;
+      let endNode: Text | null = null;
+      let endOffset = 0;
+
+      while ((node = walker.nextNode() as Text | null)) {
+        const len = node.nodeValue?.length ?? 0;
+        if (!startNode && charCount + len > idx) {
+          startNode = node;
+          startOffset = idx - charCount;
+        }
+        if (startNode && charCount + len >= idx + term.length) {
+          endNode = node;
+          endOffset = idx + term.length - charCount;
+          break;
+        }
+        charCount += len;
+      }
+
+      if (!startNode || !endNode) continue;
+
+      try {
         const range = document.createRange();
-        range.setStart(node, idx);
-        range.setEnd(node, idx + term.length);
+        range.setStart(startNode, startOffset);
+        range.setEnd(endNode, endOffset);
         const span = document.createElement("span");
         span.className = "search-scroll-target";
         range.surroundContents(span);
@@ -848,8 +880,10 @@ function scrollToSearchTerm() {
             }
           }, 1000);
         }, 2000);
-        break;
+      } catch {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
       }
+      break;
     }
   });
 }
