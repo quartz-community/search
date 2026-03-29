@@ -1,2 +1,2 @@
-export { Search, SearchOptions } from '../index.js';
+export { Search, SearchField, SearchOptions } from '../index.js';
 import '@quartz-community/types';

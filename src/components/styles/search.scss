@@ -47,7 +47,7 @@
 .search > .search-container {
   position: fixed;
   contain: layout;
-  z-index: 999;
+  z-index: var(--search-z-index, 999);
   left: 0;
   top: 0;
   width: 100vw;
@@ -74,7 +74,7 @@
   }
 }
 
-.search > .search-container > .search-space > * {
+.search > .search-container > .search-space > *:not(.ghost-text):not(.tag-suggestions) {
   width: 100%;
   border-radius: 7px;
   background: var(--light);
@@ -152,6 +152,7 @@
   .search > .search-container > .search-space > .search-layout[data-preview] > .results-container {
     width: 100%;
     height: auto;
+    max-height: 60vh;
     flex: 0 0 100%;
   }
 }
@@ -310,4 +311,62 @@
   > .results-container
   .result-card.no-match {
   cursor: default;
+}
+
+.search > .search-container > .search-space {
+  position: relative;
+}
+
+.search > .search-container > .search-space > .ghost-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 0.5em 1em;
+  font-family: var(--bodyFont);
+  font-size: 1.1em;
+  color: var(--gray);
+  opacity: 0.6;
+  white-space: pre;
+  overflow: hidden;
+  height: auto;
+  line-height: normal;
+  border: 1px solid transparent;
+}
+
+.search > .search-container > .search-space > .tag-suggestions {
+  position: absolute;
+  top: calc(2.1em + 1em + 2px);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--search-z-index, 999) + 1);
+  background: var(--light);
+  border: 1px solid var(--lightgray);
+  border-radius: 5px;
+  box-shadow:
+    0 4px 12px rgba(27, 33, 48, 0.1),
+    0 2px 6px rgba(27, 33, 48, 0.08);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.search > .search-container > .search-space > .tag-suggestions > .tag-suggestion-item {
+  padding: 0.4em 1em;
+  cursor: pointer;
+  font-family: var(--bodyFont);
+  font-size: 0.95em;
+  color: var(--dark);
+  transition: background 0.15s ease;
+}
+
+.search > .search-container > .search-space > .tag-suggestions > .tag-suggestion-item:hover,
+.search > .search-container > .search-space > .tag-suggestions > .tag-suggestion-item.active {
+  background: var(--lightgray);
+}
+
+.search > .search-container > .search-space > .tag-suggestions > .tag-suggestion-item.active {
+  color: var(--secondary);
+  font-weight: 600;
 }

@@ -4,6 +4,7 @@ import {
   normalizeRelativeURLs,
   registerEscapeHandler,
   resolveBasePath,
+  escapeHTML,
 } from "@quartz-community/utils";
 
 interface Item {
@@ -81,7 +82,31 @@ const index = new FlexSearch.Document({
 
 let contentData: Record<string, Item> | null = null;
 let idDataMap: string[] = [];
+let allTags: string[] = [];
 const fetchContentCache = new Map<string, Element[]>();
+
+function parseSearchQuery(input: string): { tags: string[]; query: string } {
+  const tokens = input.split(/\s+/);
+  const tags: string[] = [];
+  const queryParts: string[] = [];
+  for (const token of tokens) {
+    if (token.startsWith("#") && token.length > 1) {
+      tags.push(token.substring(1));
+    } else if (token !== "#") {
+      queryParts.push(token);
+    }
+  }
+  return { tags, query: queryParts.join(" ").trim() };
+}
+
+function getCurrentTagToken(input: string): string | null {
+  const tokens = input.split(/\s+/);
+  const last = tokens[tokens.length - 1];
+  if (last && last.startsWith("#")) {
+    return last.substring(1);
+  }
+  return null;
+}
 const parser = new DOMParser();
 
 async function fetchContent(slug: string): Promise<Element[]> {
@@ -89,15 +114,18 @@ async function fetchContent(slug: string): Promise<Element[]> {
     return fetchContentCache.get(slug) as Element[];
   }
   const targetUrl = new URL(resolveBasePath(slug), window.location.origin).toString();
-  const contents = await fetch(targetUrl)
-    .then((res) => res.text())
-    .then((contents) => {
-      const html = parser.parseFromString(contents ?? "", "text/html");
-      normalizeRelativeURLs(html, targetUrl);
-      return Array.from(html.getElementsByClassName("popover-hint"));
-    });
-  fetchContentCache.set(slug, contents);
-  return contents;
+  try {
+    const res = await fetch(targetUrl);
+    if (!res.ok) return [];
+    const text = await res.text();
+    const html = parser.parseFromString(text ?? "", "text/html");
+    normalizeRelativeURLs(html, targetUrl);
+    const contents = Array.from(html.getElementsByClassName("popover-hint"));
+    fetchContentCache.set(slug, contents);
+    return contents;
+  } catch {
+    return [];
+  }
 }
 
 const cleanupFns: Array<() => void> = [];
@@ -116,18 +144,24 @@ async function setupSearch() {
 
   for (const searchEl of Array.from(searchElements)) {
     const container = searchEl.querySelector(".search-container") as HTMLElement | null;
-    const searchButton = searchEl.querySelector(".search-button");
+    const searchButton = searchEl.querySelector(".search-button") as HTMLElement | null;
     const searchBar = searchEl.querySelector(".search-bar") as HTMLInputElement;
     const searchLayout = searchEl.querySelector(".search-layout");
 
     if (!container || !searchButton || !searchBar || !searchLayout) continue;
 
     const enablePreview = searchLayout.getAttribute("data-preview") === "true";
+    const fieldPriorityAttr = searchLayout.getAttribute("data-field-priority");
+    const fieldPriority: string[] = fieldPriorityAttr
+      ? JSON.parse(fieldPriorityAttr)
+      : ["title", "content", "tags"];
 
     let results = searchLayout.querySelector(".results-container") as HTMLDivElement | null;
     if (!results) {
       results = document.createElement("div");
       results.className = "results-container";
+      results.setAttribute("role", "listbox");
+      results.setAttribute("aria-label", "Search results");
       searchLayout.appendChild(results);
     }
 
@@ -138,63 +172,171 @@ async function setupSearch() {
       searchLayout.appendChild(preview);
     }
 
+    const tagDropdown = document.createElement("div");
+    tagDropdown.className = "tag-suggestions";
+    tagDropdown.setAttribute("role", "listbox");
+    tagDropdown.setAttribute("aria-label", "Tag suggestions");
+    tagDropdown.style.display = "none";
+    const searchSpace = searchBar.parentElement!;
+    searchSpace.insertBefore(tagDropdown, searchBar.nextSibling);
+
+    const ghostText = document.createElement("span");
+    ghostText.className = "ghost-text";
+    ghostText.setAttribute("aria-hidden", "true");
+    searchSpace.insertBefore(ghostText, searchBar.nextSibling);
+
+    let tagSuggestionIndex = -1;
+    let filteredTags: string[] = [];
+    let tagDropdownVisible = false;
+
+    const updateGhostText = (partial: string) => {
+      if (tagSuggestionIndex < 0 || tagSuggestionIndex >= filteredTags.length) {
+        ghostText.textContent = "";
+        return;
+      }
+      const selectedTag = filteredTags[tagSuggestionIndex]!;
+      if (!selectedTag.toLowerCase().startsWith(partial.toLowerCase())) {
+        ghostText.textContent = "";
+        return;
+      }
+      const completion = selectedTag.substring(partial.length);
+      ghostText.innerHTML = "";
+      const invisible = document.createElement("span");
+      invisible.style.visibility = "hidden";
+      invisible.textContent = searchBar.value;
+      ghostText.appendChild(invisible);
+      ghostText.appendChild(document.createTextNode(completion));
+    };
+
+    const updateTagDropdownHighlight = () => {
+      const items = tagDropdown.querySelectorAll(".tag-suggestion-item");
+      items.forEach((item, i) => {
+        item.classList.toggle("active", i === tagSuggestionIndex);
+      });
+      const partial = getCurrentTagToken(searchBar.value) || "";
+      updateGhostText(partial);
+    };
+
+    const hideTagDropdown = () => {
+      tagDropdownVisible = false;
+      tagSuggestionIndex = -1;
+      filteredTags = [];
+      tagDropdown.style.display = "none";
+      ghostText.textContent = "";
+    };
+
+    const acceptTagSuggestion = (tag: string) => {
+      const value = searchBar.value;
+      const lastHashIndex = value.lastIndexOf("#");
+      if (lastHashIndex !== -1) {
+        searchBar.value = value.substring(0, lastHashIndex) + "#" + tag + " ";
+      }
+      hideTagDropdown();
+      searchBar.focus();
+      searchBar.dispatchEvent(new Event("input"));
+    };
+
+    const showTagDropdown = (partial: string) => {
+      if (!indexInitialized) return;
+      filteredTags =
+        partial === ""
+          ? allTags.slice(0, 10)
+          : allTags.filter((t) => t.toLowerCase().startsWith(partial.toLowerCase())).slice(0, 10);
+      if (filteredTags.length === 0) {
+        hideTagDropdown();
+        return;
+      }
+      tagSuggestionIndex = 0;
+      tagDropdownVisible = true;
+      removeAllChildren(tagDropdown);
+      for (let i = 0; i < filteredTags.length; i++) {
+        const tag = filteredTags[i]!;
+        const item = document.createElement("div");
+        item.className = "tag-suggestion-item" + (i === 0 ? " active" : "");
+        item.setAttribute("role", "option");
+        item.setAttribute("data-tag", tag);
+        item.setAttribute("data-index", String(i));
+        item.textContent = "#" + tag;
+        tagDropdown.appendChild(item);
+      }
+      tagDropdown.style.display = "block";
+      updateGhostText(partial);
+    };
+
+    const navigateTagDropdown = (direction: "up" | "down"): boolean => {
+      if (!tagDropdownVisible || filteredTags.length === 0) return false;
+      if (direction === "down") {
+        tagSuggestionIndex = Math.min(tagSuggestionIndex + 1, filteredTags.length - 1);
+      } else {
+        tagSuggestionIndex = Math.max(tagSuggestionIndex - 1, 0);
+      }
+      updateTagDropdownHighlight();
+      return true;
+    };
+
     let currentHover: HTMLElement | null = null;
     let previewToken = 0;
+    let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const hideSearch = () => {
-      console.log("[Search] hideSearch called, stack:", new Error().stack);
       container.classList.remove("active");
+      searchButton.setAttribute("aria-expanded", "false");
       searchBar.value = "";
       removeAllChildren(results!);
       if (preview) removeAllChildren(preview);
       searchLayout.classList.remove("display-results");
       searchType = "basic";
       currentHover = null;
+      hideTagDropdown();
+      searchButton.focus();
     };
 
     const showSearch = (type: SearchType) => {
-      console.log("[Search] showSearch called, type:", type);
       searchType = type;
       container.classList.add("active");
-      console.log("[Search] container.classList after add:", container.classList.toString());
+      searchButton.setAttribute("aria-expanded", "true");
       searchBar.focus();
-      console.log(
-        "[Search] focus called, container active:",
-        container.classList.contains("active"),
-      );
     };
 
     const displayResults = async (finalResults: any[]) => {
       removeAllChildren(results);
 
       if (finalResults.length === 0) {
-        results.innerHTML =
-          '<a class="result-card no-match"><h3>No results.</h3><p>Try another search term?</p></a>';
+        const noMatch = document.createElement("a");
+        noMatch.className = "result-card no-match";
+        const noMatchTitle = document.createElement("h3");
+        noMatchTitle.textContent = "No results.";
+        const noMatchHint = document.createElement("p");
+        noMatchHint.textContent = "Try another search term?";
+        noMatch.appendChild(noMatchTitle);
+        noMatch.appendChild(noMatchHint);
+        results.appendChild(noMatch);
         currentHover = null;
         if (preview) removeAllChildren(preview);
       } else {
         for (const item of finalResults) {
-          const htmlTags =
-            item.tags.length > 0 ? '<ul class="tags">' + item.tags.join("") + "</ul>" : "";
           const itemTile = document.createElement("a");
           itemTile.className = "result-card";
           itemTile.id = item.slug;
           itemTile.href = resolveBasePath(item.slug);
-          itemTile.innerHTML =
-            '<h3 class="card-title">' +
-            item.title +
-            "</h3>" +
-            htmlTags +
-            '<p class="card-description">' +
-            item.content +
-            "</p>";
-          itemTile.addEventListener("click", (e) => {
-            if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-            hideSearch();
-          });
-          itemTile.addEventListener("mouseenter", () => {
-            setFocus(itemTile);
-          });
+
+          const titleEl = document.createElement("h3");
+          titleEl.className = "card-title";
+          titleEl.innerHTML = item.title;
+          itemTile.appendChild(titleEl);
+
+          if (item.tags.length > 0) {
+            const tagList = document.createElement("ul");
+            tagList.className = "tags";
+            tagList.innerHTML = item.tags.join("");
+            itemTile.appendChild(tagList);
+          }
+
+          const descEl = document.createElement("p");
+          descEl.className = "card-description";
+          descEl.innerHTML = item.content;
+          itemTile.appendChild(descEl);
+
           results.appendChild(itemTile);
         }
       }
@@ -205,7 +347,8 @@ async function setupSearch() {
     };
 
     const highlightTerm = () => {
-      return searchType === "tags" ? currentSearchTerm.substring(1).trim() : currentSearchTerm;
+      const parsed = parseSearchQuery(currentSearchTerm);
+      return parsed.query || (parsed.tags.length > 0 ? parsed.tags.join(" ") : currentSearchTerm);
     };
 
     const updatePreview = async (el: HTMLElement | null) => {
@@ -217,12 +360,22 @@ async function setupSearch() {
       const contents = await fetchContent(slug);
       if (token !== previewToken) return;
       const term = highlightTerm();
+      const previewInner = document.createElement("div");
+      previewInner.className = "preview-inner";
       for (const contentEl of contents) {
         const cloned = contentEl.cloneNode(true) as HTMLElement;
         if (term.trim() !== "") {
           cloned.innerHTML = highlightHTML(term, cloned);
         }
-        preview.appendChild(cloned);
+        previewInner.appendChild(cloned);
+      }
+      preview.appendChild(previewInner);
+
+      const highlights = Array.from(preview.getElementsByClassName("highlight")).sort(
+        (a, b) => b.innerHTML.length - a.innerHTML.length,
+      );
+      if (highlights[0]) {
+        highlights[0].scrollIntoView({ block: "start" });
       }
     };
 
@@ -230,7 +383,8 @@ async function setupSearch() {
       if (currentHover) currentHover.classList.remove("focus");
       currentHover = el;
       if (currentHover) currentHover.classList.add("focus");
-      updatePreview(currentHover);
+      if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
+      previewDebounceTimer = setTimeout(() => updatePreview(currentHover), 150);
     };
 
     const focusByIndex = (index: number) => {
@@ -260,48 +414,67 @@ async function setupSearch() {
     };
 
     const onType = async (e: Event) => {
-      currentSearchTerm = (e.target as HTMLInputElement).value;
-      searchLayout.classList.toggle("display-results", currentSearchTerm !== "");
-      searchType = currentSearchTerm.startsWith("#") ? "tags" : "basic";
+      const inputValue = (e.target as HTMLInputElement).value;
+      currentSearchTerm = inputValue;
 
-      if (currentSearchTerm === "") {
+      const partialTag = getCurrentTagToken(inputValue);
+      if (partialTag !== null) {
+        showTagDropdown(partialTag);
+      } else {
+        hideTagDropdown();
+      }
+
+      const parsed = parseSearchQuery(inputValue);
+      const hasContent = parsed.query !== "" || parsed.tags.length > 0;
+      searchLayout.classList.toggle("display-results", hasContent);
+      searchType = parsed.tags.length > 0 && !parsed.query ? "tags" : "basic";
+
+      if (!hasContent) {
         removeAllChildren(results);
         if (preview) removeAllChildren(preview);
         currentHover = null;
         return;
       }
 
-      const query = currentSearchTerm;
       let searchResults: any[];
-
-      if (searchType === "tags") {
-        const tagQuery = currentSearchTerm.substring(1).trim();
+      if (parsed.query) {
         searchResults = await index.searchAsync({
-          query: tagQuery,
-          limit: numSearchResults,
+          query: parsed.query,
+          limit: parsed.tags.length > 0 ? 10000 : numSearchResults,
+          index: ["title", "content"],
+        });
+      } else if (parsed.tags.length > 0) {
+        searchResults = await index.searchAsync({
+          query: parsed.tags[0],
+          limit: 10000,
           index: ["tags"],
         });
       } else {
-        searchResults = await index.searchAsync({
-          query,
-          limit: numSearchResults,
-          index: ["title", "content"],
-        });
+        searchResults = [];
       }
 
-      const allIds = new Set<number>();
-      for (const fieldResult of searchResults) {
-        if (fieldResult && fieldResult.result) {
-          for (const id of fieldResult.result) {
-            allIds.add(id as number);
-          }
-        }
-      }
+      const getByField = (field: string): number[] => {
+        const matched = searchResults.filter((x: any) => x.field === field);
+        return matched.length === 0 ? [] : ([...matched[0].result] as number[]);
+      };
 
-      const finalResults: any[] = [];
-      allIds.forEach((id) => {
-        finalResults.push(formatForDisplay(currentSearchTerm, id));
+      const allIds: Set<number> = new Set(fieldPriority.flatMap((field) => getByField(field)));
+
+      const filteredIds = [...allIds].filter((id) => {
+        if (parsed.tags.length === 0) return true;
+        const slug = idDataMap[id];
+        if (!slug) return false;
+        const item = contentData?.[slug];
+        if (!item) return false;
+        const itemTags: string[] = item.tags || [];
+        return parsed.tags.every((tag) =>
+          itemTags.some((t) => t.toLowerCase() === tag.toLowerCase()),
+        );
       });
+
+      const displayTerm =
+        parsed.query || (parsed.tags.length > 0 ? parsed.tags.join(" ") : inputValue);
+      const finalResults = filteredIds.map((id) => formatForDisplay(displayTerm, id));
 
       await displayResults(finalResults.slice(0, numSearchResults));
       const resultElements = getResultElements();
@@ -309,12 +482,6 @@ async function setupSearch() {
     };
 
     const onButtonClick = (e: Event) => {
-      console.log(
-        "[Search] Button click event, target:",
-        e.target,
-        "currentTarget:",
-        e.currentTarget,
-      );
       e.stopPropagation();
       showSearch("basic");
     };
@@ -325,6 +492,38 @@ async function setupSearch() {
     addCleanup(() => searchBar.removeEventListener("input", onType));
 
     const onSearchBarKeydown = (e: KeyboardEvent) => {
+      if (tagDropdownVisible) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          navigateTagDropdown("down");
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          navigateTagDropdown("up");
+          return;
+        }
+        if (e.key === "Tab") {
+          e.preventDefault();
+          if (tagSuggestionIndex >= 0 && tagSuggestionIndex < filteredTags.length) {
+            acceptTagSuggestion(filteredTags[tagSuggestionIndex]!);
+          }
+          return;
+        }
+        if (e.key === "Enter" && !e.isComposing) {
+          if (tagSuggestionIndex >= 0 && tagSuggestionIndex < filteredTags.length) {
+            e.preventDefault();
+            acceptTagSuggestion(filteredTags[tagSuggestionIndex]!);
+            return;
+          }
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          hideTagDropdown();
+          return;
+        }
+      }
+
       if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
         e.preventDefault();
         focusPrevious();
@@ -335,7 +534,7 @@ async function setupSearch() {
         focusNext();
         return;
       }
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !e.isComposing) {
         const focused = currentHover;
         if (focused instanceof HTMLAnchorElement) {
           hideSearch();
@@ -354,10 +553,55 @@ async function setupSearch() {
         e.preventDefault();
         showSearch("tags");
         searchBar.value = "#";
+        searchBar.dispatchEvent(new Event("input"));
       }
     };
     document.addEventListener("keydown", onDocumentKeydown);
     addCleanup(() => document.removeEventListener("keydown", onDocumentKeydown));
+
+    const onResultsClick = (e: Event) => {
+      const target = (e.target as HTMLElement).closest(".result-card") as HTMLAnchorElement | null;
+      if (!target || target.classList.contains("no-match")) return;
+      if (e instanceof MouseEvent && (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)) return;
+      hideSearch();
+    };
+    const onResultsMouseover = (e: Event) => {
+      const target = (e.target as HTMLElement).closest(".result-card") as HTMLElement | null;
+      if (!target || target.classList.contains("no-match")) return;
+      setFocus(target);
+    };
+    results.addEventListener("click", onResultsClick);
+    results.addEventListener("mouseover", onResultsMouseover);
+    addCleanup(() => {
+      results!.removeEventListener("click", onResultsClick);
+      results!.removeEventListener("mouseover", onResultsMouseover);
+    });
+
+    const onTagDropdownClick = (e: Event) => {
+      const target = (e.target as HTMLElement).closest(
+        ".tag-suggestion-item",
+      ) as HTMLElement | null;
+      if (!target) return;
+      const tag = target.getAttribute("data-tag");
+      if (tag) acceptTagSuggestion(tag);
+    };
+    const onTagDropdownMouseover = (e: Event) => {
+      const target = (e.target as HTMLElement).closest(
+        ".tag-suggestion-item",
+      ) as HTMLElement | null;
+      if (!target) return;
+      const idx = target.getAttribute("data-index");
+      if (idx !== null) {
+        tagSuggestionIndex = parseInt(idx, 10);
+        updateTagDropdownHighlight();
+      }
+    };
+    tagDropdown.addEventListener("click", onTagDropdownClick);
+    tagDropdown.addEventListener("mouseover", onTagDropdownMouseover);
+    addCleanup(() => {
+      tagDropdown.removeEventListener("click", onTagDropdownClick);
+      tagDropdown.removeEventListener("mouseover", onTagDropdownMouseover);
+    });
 
     const cleanupEscapeHandler = registerEscapeHandler(container, hideSearch);
     addCleanup(cleanupEscapeHandler);
@@ -419,7 +663,9 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
 
 function highlight(searchTerm: string, text: string, trim?: boolean): string {
   const tokenizedTerms = tokenizeTerm(searchTerm);
-  const tokenizedText = text.split(/\s+/).filter((t) => t !== "");
+  let tokenizedText = escapeHTML(text)
+    .split(/\s+/)
+    .filter((t) => t !== "");
 
   let startIndex = 0;
   let endIndex = tokenizedText.length - 1;
@@ -441,8 +687,9 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
       }
     }
 
-    startIndex = Math.max(bestIndex - contextWindowWords / 2, 0);
-    endIndex = Math.min(startIndex + contextWindowWords, tokenizedText.length - 1);
+    startIndex = Math.max(bestIndex - contextWindowWords, 0);
+    endIndex = Math.min(startIndex + 2 * contextWindowWords, tokenizedText.length - 1);
+    tokenizedText = tokenizedText.slice(startIndex, endIndex);
   }
 
   const slice = tokenizedText
@@ -464,14 +711,15 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
   );
 }
 
-function highlightTags(term: string, tags?: string[]): string[] {
-  if (!tags || searchType !== "tags") return [];
+function highlightTags(searchTags: string[], tags?: string[]): string[] {
+  if (!tags || tags.length === 0 || searchTags.length === 0) return [];
   return tags
     .map((tag) => {
-      if (tag.toLowerCase().includes(term.toLowerCase())) {
-        return `<li><p class="match-tag">#${tag}</p></li>`;
+      const escaped = escapeHTML(tag);
+      if (searchTags.some((st) => tag.toLowerCase().includes(st.toLowerCase()))) {
+        return `<li><p class="match-tag">#${escaped}</p></li>`;
       } else {
-        return `<li><p>#${tag}</p></li>`;
+        return `<li><p>#${escaped}</p></li>`;
       }
     })
     .slice(0, numTagResults);
@@ -498,31 +746,42 @@ function formatForDisplay(term: string, id: number): any {
       tags: [],
     };
   }
+  const parsed = parseSearchQuery(currentSearchTerm);
   return {
     id: id,
     slug: slug,
-    title: searchType === "tags" ? data.title : highlight(term, data.title || ""),
+    title:
+      parsed.tags.length > 0 && !parsed.query
+        ? escapeHTML(data.title)
+        : highlight(term, data.title || ""),
     content: highlight(term, data.content || "", true),
-    tags: highlightTags(term.substring(1), data.tags),
+    tags: highlightTags(parsed.tags, data.tags),
   };
 }
 
 async function fillDocument() {
   if (!contentData) return;
   let id = 0;
+  const promises: Array<Promise<unknown>> = [];
+  const tagSet = new Set<string>();
   for (const slug of Object.keys(contentData)) {
     const fileData = contentData[slug];
     if (!fileData) continue;
     idDataMap[id] = slug;
-    await index.addAsync(id, {
-      id: id,
-      slug: slug,
-      title: fileData.title || "",
-      content: fileData.content || "",
-      tags: fileData.tags || [],
-    });
+    for (const tag of fileData.tags || []) tagSet.add(tag);
+    promises.push(
+      index.addAsync(id, {
+        id: id,
+        slug: slug,
+        title: fileData.title || "",
+        content: fileData.content || "",
+        tags: fileData.tags || [],
+      }),
+    );
     id++;
   }
+  await Promise.all(promises);
+  allTags = [...tagSet].sort();
 }
 
 async function fetchContentIndex(): Promise<Record<string, Item>> {
