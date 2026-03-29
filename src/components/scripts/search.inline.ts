@@ -295,7 +295,7 @@ async function setupSearch() {
 
     const showSearch = (type: SearchType) => {
       searchType = type;
-      if (sidebar) sidebar.style.zIndex = "auto";
+      if (sidebar) sidebar.style.zIndex = "9999";
       container.classList.add("active");
       searchButton.setAttribute("aria-expanded", "true");
       searchBar.focus();
