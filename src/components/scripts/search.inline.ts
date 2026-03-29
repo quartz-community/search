@@ -371,12 +371,14 @@ async function setupSearch() {
       }
       preview.appendChild(previewInner);
 
-      const highlights = Array.from(preview.getElementsByClassName("highlight")).sort(
-        (a, b) => b.innerHTML.length - a.innerHTML.length,
-      );
-      if (highlights[0]) {
-        highlights[0].scrollIntoView({ block: "start" });
-      }
+      requestAnimationFrame(() => {
+        const highlights = Array.from(preview!.getElementsByClassName("highlight")).sort(
+          (a, b) => b.innerHTML.length - a.innerHTML.length,
+        );
+        if (highlights[0]) {
+          highlights[0].scrollIntoView({ block: "start" });
+        }
+      });
     };
 
     const setFocus = (el: HTMLElement | null) => {
