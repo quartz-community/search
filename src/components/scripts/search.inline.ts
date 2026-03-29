@@ -372,12 +372,17 @@ async function setupSearch() {
       preview.appendChild(previewInner);
 
       requestAnimationFrame(() => {
-        const highlights = Array.from(preview!.getElementsByClassName("highlight")).sort(
-          (a, b) => b.innerHTML.length - a.innerHTML.length,
-        );
-        if (highlights[0]) {
-          highlights[0].scrollIntoView({ block: "start" });
+        const highlights = Array.from(preview!.getElementsByClassName("highlight"));
+        if (highlights.length === 0) return;
+        highlights.sort((a, b) => b.innerHTML.length - a.innerHTML.length);
+        const target = highlights[0] as HTMLElement;
+        let offset = 0;
+        let current: HTMLElement | null = target;
+        while (current && current !== preview) {
+          offset += current.offsetTop;
+          current = current.offsetParent as HTMLElement | null;
         }
+        preview!.scrollTop = Math.max(0, offset - 50);
       });
     };
 
