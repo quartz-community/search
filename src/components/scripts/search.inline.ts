@@ -547,6 +547,7 @@ async function setupSearch() {
       if (e.key === "Enter" && !e.isComposing) {
         const focused = currentHover;
         if (focused instanceof HTMLAnchorElement) {
+          storeSearchTerm();
           hideSearch();
           window.location.href = focused.href;
         }
@@ -569,10 +570,18 @@ async function setupSearch() {
     document.addEventListener("keydown", onDocumentKeydown);
     addCleanup(() => document.removeEventListener("keydown", onDocumentKeydown));
 
+    const storeSearchTerm = () => {
+      const parsed = parseSearchQuery(currentSearchTerm);
+      const term =
+        parsed.query || (parsed.tags.length > 0 ? parsed.tags.join(" ") : currentSearchTerm);
+      if (term.trim()) sessionStorage.setItem("search-term", term.trim());
+    };
+
     const onResultsClick = (e: Event) => {
       const target = (e.target as HTMLElement).closest(".result-card") as HTMLAnchorElement | null;
       if (!target || target.classList.contains("no-match")) return;
       if (e instanceof MouseEvent && (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)) return;
+      storeSearchTerm();
       hideSearch();
     };
     const onResultsMouseover = (e: Event) => {
@@ -808,10 +817,48 @@ async function initIndex() {
   indexInitialized = true;
 }
 
+function scrollToSearchTerm() {
+  const term = sessionStorage.getItem("search-term");
+  if (!term) return;
+  sessionStorage.removeItem("search-term");
+
+  requestAnimationFrame(() => {
+    const contentEl =
+      document.querySelector(".popover-hint") ?? document.querySelector("article") ?? document.body;
+    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    let node: Text | null;
+    while ((node = walker.nextNode() as Text | null)) {
+      const text = node.nodeValue ?? "";
+      const idx = text.toLowerCase().indexOf(term.toLowerCase());
+      if (idx !== -1) {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + term.length);
+        const span = document.createElement("span");
+        span.className = "search-scroll-target";
+        range.surroundContents(span);
+        span.scrollIntoView({ block: "center", behavior: "smooth" });
+        setTimeout(() => {
+          span.classList.add("fade-out");
+          setTimeout(() => {
+            const parent = span.parentNode;
+            if (parent) {
+              parent.replaceChild(document.createTextNode(span.textContent || ""), span);
+              parent.normalize();
+            }
+          }, 1000);
+        }, 2000);
+        break;
+      }
+    }
+  });
+}
+
 async function handleNavOrRender() {
   runCleanups();
   await initIndex();
   await setupSearch();
+  scrollToSearchTerm();
 }
 
 document.addEventListener("nav", handleNavOrRender);
