@@ -820,6 +820,60 @@ async function initIndex() {
   indexInitialized = true;
 }
 
+async function addContentIndexEntries(patch: Record<string, Item>): Promise<number> {
+  if (!indexInitialized || !contentData) return 0;
+  const tagSet = new Set<string>(allTags);
+  let added = 0;
+  for (const slug of Object.keys(patch)) {
+    if (contentData[slug]) continue;
+    const fileData = patch[slug];
+    if (!fileData) continue;
+    const id = idDataMap.length;
+    idDataMap[id] = slug;
+    contentData[slug] = fileData;
+    for (const tag of fileData.tags || []) tagSet.add(tag);
+    await index.addAsync(id, {
+      id,
+      slug,
+      title: fileData.title || "",
+      content: fileData.content || "",
+      tags: fileData.tags || [],
+    });
+    added++;
+  }
+  allTags = [...tagSet].sort();
+  return added;
+}
+
+document.addEventListener("content-index-updated", (event) => {
+  const detail = (event as CustomEvent).detail as { slugs?: string[] } | undefined;
+  if (!indexInitialized || !contentData) return;
+  const slugs = detail?.slugs;
+  if (!Array.isArray(slugs) || slugs.length === 0) return;
+
+  (async () => {
+    try {
+      const base = (await fetchData) as unknown as Record<string, unknown>;
+      if (!base || typeof base !== "object") return;
+      const root =
+        (base as Record<string, unknown>).content &&
+        typeof (base as Record<string, unknown>).content === "object"
+          ? ((base as Record<string, unknown>).content as Record<string, unknown>)
+          : (base as Record<string, unknown>);
+      const patch: Record<string, Item> = {};
+      for (const slug of slugs) {
+        const entry = root[slug];
+        if (entry && typeof entry === "object") {
+          patch[slug] = entry as Item;
+        }
+      }
+      await addContentIndexEntries(patch);
+    } catch {
+      // non-fatal: shadow index patch failed
+    }
+  })();
+});
+
 function scrollToSearchTerm() {
   const term = sessionStorage.getItem("search-term");
   if (!term) return;
