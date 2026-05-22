@@ -99,12 +99,27 @@
     "dependencies": [],
     "defaultOrder": 50,
     "defaultEnabled": true,
-    "defaultOptions": {},
+    "defaultOptions": {
+      "enablePreview": true,
+      "fieldPriority": [
+        "title",
+        "content",
+        "tags"
+      ]
+    },
     "components": {
       "Search": {
         "displayName": "Search",
         "defaultPosition": "left",
         "defaultPriority": 20
+      }
+    },
+    "optionSchema": {
+      "enablePreview": {
+        "type": "boolean"
+      },
+      "fieldPriority": {
+        "type": "array"
       }
     }
   }
