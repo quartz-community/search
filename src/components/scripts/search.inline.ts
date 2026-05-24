@@ -550,9 +550,10 @@ async function setupSearch() {
       if (e.key === "Enter" && !e.isComposing) {
         const focused = currentHover;
         if (focused instanceof HTMLAnchorElement) {
+          e.preventDefault();
           storeSearchTerm();
           hideSearch();
-          window.location.href = focused.href;
+          focused.click();
         }
       }
     };
