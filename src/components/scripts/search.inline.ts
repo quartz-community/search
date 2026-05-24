@@ -325,25 +325,19 @@ async function setupSearch() {
 
           const titleEl = document.createElement("h3");
           titleEl.className = "card-title";
-          titleEl.textContent = item.title;
+          titleEl.innerHTML = item.title.replace(/<(?!\/?span\b)[^>]*>/gi, "");
           itemTile.appendChild(titleEl);
 
           if (item.tags.length > 0) {
             const tagList = document.createElement("ul");
             tagList.className = "tags";
-            tagList.textContent = "";
-            for (const tag of item.tags) {
-              const li = document.createElement("li");
-              li.textContent = tag.replace(/<[^>]*>/g, "");
-              tagList.appendChild(li);
-            }
+            tagList.innerHTML = item.tags.join("");
             itemTile.appendChild(tagList);
           }
 
           const descEl = document.createElement("p");
           descEl.className = "card-description";
-          // Sanitize content but preserve <mark> tags from search highlighting
-          descEl.innerHTML = item.content.replace(/<(?!\/?mark\b)[^>]*>/gi, "");
+          descEl.innerHTML = item.content.replace(/<(?!\/?span\b)[^>]*>/gi, "");
           itemTile.appendChild(descEl);
 
           results.appendChild(itemTile);
