@@ -880,14 +880,17 @@ function scrollToSearchTerm() {
   sessionStorage.removeItem("search-term");
 
   requestAnimationFrame(() => {
-    const candidates = document.querySelectorAll(
-      ".popover-hint p, .popover-hint li, .popover-hint h1, .popover-hint h2, " +
-        ".popover-hint h3, .popover-hint h4, .popover-hint h5, .popover-hint h6, " +
-        ".popover-hint td, .popover-hint th, .popover-hint blockquote, " +
-        "article p, article li, article h1, article h2, article h3",
-    );
+    const headingSelector =
+      ".popover-hint h1, .popover-hint h2, .popover-hint h3, .popover-hint h4, " +
+      ".popover-hint h5, .popover-hint h6, article h1, article h2, article h3";
+    const bodySelector =
+      ".popover-hint p, .popover-hint li, .popover-hint td, .popover-hint th, " +
+      ".popover-hint blockquote, article p, article li";
+    const headings = document.querySelectorAll(headingSelector);
+    const bodyEls = document.querySelectorAll(bodySelector);
+    const candidates = [...Array.from(headings), ...Array.from(bodyEls)];
 
-    for (const el of Array.from(candidates)) {
+    for (const el of candidates) {
       const text = el.textContent ?? "";
       const idx = text.toLowerCase().indexOf(term.toLowerCase());
       if (idx === -1) continue;
