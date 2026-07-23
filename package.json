@@ -50,7 +50,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run lint && npm run format && npm run test",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "release": "npm run build && changeset publish"
   },
   "peerDependencies": {
     "preact": "^10.0.0"
@@ -81,7 +82,8 @@
     "sass": "^1.97.3",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@changesets/cli": "^2.29.2"
   },
   "engines": {
     "node": ">=22",
