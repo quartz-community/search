@@ -120,6 +120,17 @@
       "fieldPriority": {
         "type": "array"
       }
+    },
+    "capabilities": {
+      "requires": {
+        "files": [
+          {
+            "name": "static/contentIndex.json",
+            "from": "content-index",
+            "reason": "search has nothing to search"
+          }
+        ]
+      }
     }
   },
   "publishConfig": {
