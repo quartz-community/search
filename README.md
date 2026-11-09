@@ -15,15 +15,23 @@ The Search component for Quartz - full-text search with FlexSearch integration.
 ## Installation
 
 ```bash
-npx quartz plugin add github:quartz-community/search
+npx quartz plugin add @quartz-community/search
 ```
+
+Search is already in Quartz's default configuration.
 
 ## Usage
 
 ```yaml title="quartz.config.yaml"
 plugins:
-  - source: github:quartz-community/search
+  - source: "@quartz-community/search"
     enabled: true
+    options:
+      enablePreview: true
+      fieldPriority:
+        - title
+        - content
+        - tags
     layout:
       position: left
       priority: 20
@@ -32,30 +40,14 @@ plugins:
         grow: true
 ```
 
-For advanced use cases, you can override in TypeScript:
-
-```ts title="quartz.ts (override)"
-import * as ExternalPlugin from "./.quartz/plugins";
-
-ExternalPlugin.Search({
-  enablePreview: true,
-  placeholder: "Search for something",
-  title: "Search",
-});
-```
-
 ## Configuration Options
 
-```typescript
-interface SearchOptions {
-  /** Enable content preview panel */
-  enablePreview?: boolean;
-  /** Custom placeholder text */
-  placeholder?: string;
-  /** Custom title for the search button */
-  title?: string;
-}
-```
+| Option          | Type                                    | Default                        | Description                                                      |
+| --------------- | --------------------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| `enablePreview` | `boolean`                               | `true`                         | Show a preview of the selected result's content beside the list. |
+| `fieldPriority` | `Array<"title" \| "content" \| "tags">` | `["title", "content", "tags"]` | Order in which matches from each field are ranked.               |
+
+The placeholder and button text come from the site's `locale`.
 
 ## Default Behavior
 
@@ -63,29 +55,28 @@ By default, the search component:
 
 - Displays as a button with a search icon
 - Opens a fullscreen search modal when clicked
-- Shows up to 8 search results
-- Enables content preview on desktop (can be disabled)
-- Supports keyboard navigation (arrow keys, Enter, Escape)
-- Uses FlexSearch from CDN for indexing
+- Shows the top 8 search results, each with up to 5 of its tags
+- Shows a content preview beside the results on desktop (hidden below 800px; disable with `enablePreview: false`)
+- Supports keyboard navigation (arrow keys, Tab, Enter, Escape)
 
 ## How It Works
 
 The Search component:
 
-1. Loads FlexSearch library from CDN when initialized
-2. Fetches content data via the `fetchData` global (resolves `contentIndex.json` with the correct base path)
-3. Builds a search index from your content
-4. Performs real-time search as you type
-5. Shows results with optional content preview
+1. Fetches content data via the `fetchData` global (resolves `contentIndex.json` with the correct base path)
+2. Builds a search index from your content with FlexSearch (bundled with the plugin)
+3. Performs real-time search as you type
+4. Shows results with optional content preview
 
 > [!info]
-> Search requires the `ContentIndex` emitter plugin to be present in your Quartz configuration.
+> Search reads `contentIndex.json`, which Quartz's built-in content index emits by default. It has nothing to search if `configuration.contentIndex` is disabled in `quartz.config.yaml`.
 
 ## Keyboard Shortcuts
 
 - `Ctrl/Cmd + K` - Open/Close search
+- `Ctrl/Cmd + Shift + K` - Open search in tag mode (or start the query with `#`)
 - `Escape` - Close search
-- `Arrow Up/Down` - Navigate results
+- `Arrow Up/Down`, `Tab`/`Shift + Tab` - Navigate results
 - `Enter` - Open selected result
 
 ## Development
@@ -101,8 +92,6 @@ To build locally:
 npm install
 npm run build
 ```
-
-The `prepare` script automatically builds during installation.
 
 ## Documentation
 
