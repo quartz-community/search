@@ -1,6 +1,6 @@
 {
   "name": "@quartz-community/search",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Search component for Quartz - full-text search with FlexSearch.",
   "type": "module",
   "license": "MIT",
