@@ -160,7 +160,7 @@ async function setupSearch() {
     let results = searchLayout.querySelector(".results-container") as HTMLDivElement | null;
     if (!results) {
       results = document.createElement("div");
-      results.className = "results-container";
+      results.className = "results-container prompt-results";
       results.setAttribute("role", "listbox");
       results.setAttribute("aria-label", "Search results");
       searchLayout.appendChild(results);
@@ -306,7 +306,7 @@ async function setupSearch() {
 
       if (finalResults.length === 0) {
         const noMatch = document.createElement("a");
-        noMatch.className = "result-card no-match";
+        noMatch.className = "result-card suggestion-item mod-complex no-match";
         const noMatchTitle = document.createElement("h3");
         noMatchTitle.textContent = "No results.";
         const noMatchHint = document.createElement("p");
@@ -319,12 +319,12 @@ async function setupSearch() {
       } else {
         for (const item of finalResults) {
           const itemTile = document.createElement("a");
-          itemTile.className = "result-card";
+          itemTile.className = "result-card suggestion-item mod-complex";
           itemTile.id = item.slug;
           itemTile.href = resolveBasePath(item.slug);
 
           const titleEl = document.createElement("h3");
-          titleEl.className = "card-title";
+          titleEl.className = "card-title suggestion-title";
           titleEl.innerHTML = item.title.replace(/<(?!\/?span\b)[^>]*>/gi, "");
           itemTile.appendChild(titleEl);
 
@@ -336,7 +336,7 @@ async function setupSearch() {
           }
 
           const descEl = document.createElement("p");
-          descEl.className = "card-description";
+          descEl.className = "card-description suggestion-note";
           descEl.innerHTML = item.content.replace(/<(?!\/?span\b)[^>]*>/gi, "");
           itemTile.appendChild(descEl);
 
@@ -390,10 +390,10 @@ async function setupSearch() {
     };
 
     const setFocus = (el: HTMLElement | null) => {
-      if (currentHover) currentHover.classList.remove("focus");
+      if (currentHover) currentHover.classList.remove("focus", "is-selected");
       currentHover = el;
       if (currentHover) {
-        currentHover.classList.add("focus");
+        currentHover.classList.add("focus", "is-selected");
         currentHover.scrollIntoView({ block: "nearest" });
       }
       if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
@@ -721,7 +721,10 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
       for (const searchTok of tokenizedTerms) {
         if (tok.toLowerCase().includes(searchTok.toLowerCase())) {
           const regex = new RegExp(searchTok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-          result = tok.replace(regex, (match) => `<span class="highlight">${match}</span>`);
+          result = tok.replace(
+            regex,
+            (match) => `<span class="highlight suggestion-highlight">${match}</span>`,
+          );
           break;
         }
       }

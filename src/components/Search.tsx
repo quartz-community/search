@@ -43,11 +43,11 @@ export default ((userOpts?: Partial<SearchOptions>) => {
           </svg>
           <p>{i18n(locale).components.search.title}</p>
         </button>
-        <div class="search-container">
-          <div class="search-space">
+        <div class="search-container mod-dim">
+          <div class="search-space prompt">
             <input
               autocomplete="off"
-              class="search-bar"
+              class="search-bar prompt-input"
               name="search"
               type="text"
               aria-label={searchPlaceholder}
