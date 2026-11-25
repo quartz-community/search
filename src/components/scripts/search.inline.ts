@@ -166,12 +166,22 @@ async function setupSearch() {
       searchLayout.appendChild(results);
     }
 
-    let preview = searchLayout.querySelector(".preview-container") as HTMLDivElement | null;
+    // The preview is its own panel, beside the results: Obsidian's page preview popover
+    // (`.popover.hover-popover > .markdown-embed`), next to its quick switcher (`.prompt`).
+    const previewPanel = searchEl.querySelector(".search-preview") as HTMLElement | null;
+    const searchArea = searchEl.querySelector(".search-space") as HTMLElement | null;
+    let preview = (previewPanel ?? searchLayout).querySelector(
+      ".preview-container",
+    ) as HTMLDivElement | null;
     if (enablePreview && !preview) {
       preview = document.createElement("div");
-      preview.className = "preview-container";
-      searchLayout.appendChild(preview);
+      preview.className = "preview-container markdown-embed";
+      (previewPanel ?? searchLayout).appendChild(preview);
     }
+    const setDisplayResults = (on: boolean) => {
+      searchLayout.classList.toggle("display-results", on);
+      searchArea?.classList.toggle("display-results", on);
+    };
 
     const tagDropdown = document.createElement("div");
     tagDropdown.className = "tag-suggestions";
@@ -286,7 +296,7 @@ async function setupSearch() {
       searchBar.value = "";
       removeAllChildren(results!);
       if (preview) removeAllChildren(preview);
-      searchLayout.classList.remove("display-results");
+      setDisplayResults(false);
       searchType = "basic";
       currentHover = null;
       hideTagDropdown();
@@ -439,7 +449,7 @@ async function setupSearch() {
 
       const parsed = parseSearchQuery(inputValue);
       const hasContent = parsed.query !== "" || parsed.tags.length > 0;
-      searchLayout.classList.toggle("display-results", hasContent);
+      setDisplayResults(hasContent);
       searchType = parsed.tags.length > 0 && !parsed.query ? "tags" : "basic";
 
       if (!hasContent) {

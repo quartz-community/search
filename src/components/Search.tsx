@@ -44,20 +44,23 @@ export default ((userOpts?: Partial<SearchOptions>) => {
           <p>{i18n(locale).components.search.title}</p>
         </button>
         <div class="search-container mod-dim">
-          <div class="search-space prompt">
-            <input
-              autocomplete="off"
-              class="search-bar prompt-input"
-              name="search"
-              type="text"
-              aria-label={searchPlaceholder}
-              placeholder={searchPlaceholder}
-            />
-            <div
-              class="search-layout"
-              data-preview={opts.enablePreview}
-              data-field-priority={JSON.stringify(opts.fieldPriority)}
-            ></div>
+          <div class="search-space" data-preview={opts.enablePreview}>
+            {opts.enablePreview && <div class="search-preview popover hover-popover"></div>}
+            <div class="search-prompt prompt">
+              <input
+                autocomplete="off"
+                class="search-bar prompt-input"
+                name="search"
+                type="text"
+                aria-label={searchPlaceholder}
+                placeholder={searchPlaceholder}
+              />
+              <div
+                class="search-layout"
+                data-preview={opts.enablePreview}
+                data-field-priority={JSON.stringify(opts.fieldPriority)}
+              ></div>
+            </div>
           </div>
         </div>
       </div>
