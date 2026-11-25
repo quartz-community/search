@@ -6,6 +6,7 @@ import {
   resolveBasePath,
   escapeHTML,
 } from "@quartz-community/utils";
+import { plainText } from "../../util/plainText";
 
 interface Item {
   id: number;
@@ -200,6 +201,40 @@ async function setupSearch() {
     let filteredTags: string[] = [];
     let tagDropdownVisible = false;
 
+    // The ghost text overlays the input: give it the input's box, font and scroll, so it
+    // lines up whatever styles the input (Quartz's, or an Obsidian theme's prompt input).
+    const alignGhostText = () => {
+      const host = ghostText.offsetParent as HTMLElement | null;
+      if (!host) return;
+      const bar = searchBar.getBoundingClientRect();
+      const box = host.getBoundingClientRect();
+      const hostStyle = getComputedStyle(host);
+      const input = getComputedStyle(searchBar);
+      const px = (v: string) => parseFloat(v) || 0;
+      const inner =
+        bar.height -
+        px(input.paddingTop) -
+        px(input.paddingBottom) -
+        px(input.borderTopWidth) -
+        px(input.borderBottomWidth);
+      Object.assign(ghostText.style, {
+        left: `${bar.left - box.left - px(hostStyle.borderLeftWidth)}px`,
+        top: `${bar.top - box.top - px(hostStyle.borderTopWidth)}px`,
+        right: "auto",
+        width: `${bar.width}px`,
+        height: `${bar.height}px`,
+        boxSizing: "border-box",
+        padding: input.padding,
+        borderStyle: "solid",
+        borderColor: "transparent",
+        borderWidth: input.borderWidth,
+        font: input.font,
+        letterSpacing: input.letterSpacing,
+        lineHeight: `${Math.max(inner, 0)}px`,
+        textIndent: `${-searchBar.scrollLeft}px`,
+      });
+    };
+
     const updateGhostText = (partial: string) => {
       if (tagSuggestionIndex < 0 || tagSuggestionIndex >= filteredTags.length) {
         ghostText.textContent = "";
@@ -217,6 +252,7 @@ async function setupSearch() {
       invisible.textContent = searchBar.value;
       ghostText.appendChild(invisible);
       ghostText.appendChild(document.createTextNode(completion));
+      alignGhostText();
     };
 
     const updateTagDropdownHighlight = () => {
@@ -696,9 +732,8 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
 
 function highlight(searchTerm: string, text: string, trim?: boolean): string {
   const tokenizedTerms = tokenizeTerm(searchTerm);
-  let tokenizedText = escapeHTML(text)
-    .split(/\s+/)
-    .filter((t) => t !== "");
+  // Match on the plain text and escape each piece, so a term never splits an entity
+  let tokenizedText = text.split(/\s+/).filter((t) => t !== "");
 
   let startIndex = 0;
   let endIndex = tokenizedText.length - 1;
@@ -727,18 +762,20 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
 
   const slice = tokenizedText
     .map((tok) => {
-      let result = tok;
       for (const searchTok of tokenizedTerms) {
         if (tok.toLowerCase().includes(searchTok.toLowerCase())) {
-          const regex = new RegExp(searchTok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-          result = tok.replace(
-            regex,
-            (match) => `<span class="highlight suggestion-highlight">${match}</span>`,
-          );
-          break;
+          const regex = new RegExp(`(${searchTok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+          return tok
+            .split(regex)
+            .map((part, i) =>
+              i % 2
+                ? `<span class="highlight suggestion-highlight">${escapeHTML(part)}</span>`
+                : escapeHTML(part),
+            )
+            .join("");
         }
       }
-      return result;
+      return escapeHTML(tok);
     })
     .join(" ");
 
@@ -820,9 +857,21 @@ async function fillDocument() {
   allTags = [...tagSet].sort();
 }
 
+/** Copies of the entries with plain-text content (the fetched index is shared). */
+function withPlainText(entries: Record<string, Item>): Record<string, Item> {
+  const out: Record<string, Item> = {};
+  for (const [slug, item] of Object.entries(entries)) {
+    out[slug] =
+      item && typeof item.content === "string"
+        ? { ...item, content: plainText(item.content) }
+        : item;
+  }
+  return out;
+}
+
 async function fetchContentIndex(): Promise<Record<string, Item>> {
   const data = await fetchData;
-  return data as unknown as Record<string, Item>;
+  return withPlainText(data as unknown as Record<string, Item>);
 }
 
 let indexInitialized = false;
@@ -836,6 +885,7 @@ async function initIndex() {
 
 async function addContentIndexEntries(patch: Record<string, Item>): Promise<number> {
   if (!indexInitialized || !contentData) return 0;
+  patch = withPlainText(patch);
   const tagSet = new Set<string>(allTags);
   let added = 0;
   for (const slug of Object.keys(patch)) {
