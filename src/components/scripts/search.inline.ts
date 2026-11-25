@@ -6,6 +6,8 @@ import {
   resolveBasePath,
   escapeHTML,
 } from "@quartz-community/utils";
+import { plainText } from "../../util/plainText";
+import { encoder, foldQuotes } from "../../util/encoder";
 
 interface Item {
   id: number;
@@ -22,50 +24,6 @@ let currentSearchTerm: string = "";
 const numSearchResults = 8;
 const numTagResults = 5;
 const contextWindowWords = 30;
-
-const encoder = (str: string): string[] => {
-  const tokens: string[] = [];
-  let bufferStart = -1;
-  let bufferEnd = -1;
-  const lower = str.toLowerCase();
-  let i = 0;
-
-  for (const char of lower) {
-    const code = char.codePointAt(0)!;
-
-    const isCJK =
-      (code >= 0x3040 && code <= 0x309f) ||
-      (code >= 0x30a0 && code <= 0x30ff) ||
-      (code >= 0x4e00 && code <= 0x9fff) ||
-      (code >= 0xac00 && code <= 0xd7af) ||
-      (code >= 0x20000 && code <= 0x2a6df);
-
-    const isWhitespace = code === 32 || code === 9 || code === 10 || code === 13;
-
-    if (isCJK) {
-      if (bufferStart !== -1) {
-        tokens.push(lower.slice(bufferStart, bufferEnd));
-        bufferStart = -1;
-      }
-      tokens.push(char);
-    } else if (isWhitespace) {
-      if (bufferStart !== -1) {
-        tokens.push(lower.slice(bufferStart, bufferEnd));
-        bufferStart = -1;
-      }
-    } else {
-      if (bufferStart === -1) bufferStart = i;
-      bufferEnd = i + 1;
-    }
-    i += char.length;
-  }
-
-  if (bufferStart !== -1) {
-    tokens.push(lower.slice(bufferStart));
-  }
-
-  return tokens;
-};
 
 const index = new FlexSearch.Document({
   encode: encoder,
@@ -160,18 +118,28 @@ async function setupSearch() {
     let results = searchLayout.querySelector(".results-container") as HTMLDivElement | null;
     if (!results) {
       results = document.createElement("div");
-      results.className = "results-container";
+      results.className = "results-container prompt-results";
       results.setAttribute("role", "listbox");
       results.setAttribute("aria-label", "Search results");
       searchLayout.appendChild(results);
     }
 
-    let preview = searchLayout.querySelector(".preview-container") as HTMLDivElement | null;
+    // The preview is its own panel, beside the results: Obsidian's page preview popover
+    // (`.popover.hover-popover > .markdown-embed`), next to its quick switcher (`.prompt`).
+    const previewPanel = searchEl.querySelector(".search-preview") as HTMLElement | null;
+    const searchArea = searchEl.querySelector(".search-space") as HTMLElement | null;
+    let preview = (previewPanel ?? searchLayout).querySelector(
+      ".preview-container",
+    ) as HTMLDivElement | null;
     if (enablePreview && !preview) {
       preview = document.createElement("div");
-      preview.className = "preview-container";
-      searchLayout.appendChild(preview);
+      preview.className = "preview-container markdown-embed";
+      (previewPanel ?? searchLayout).appendChild(preview);
     }
+    const setDisplayResults = (on: boolean) => {
+      searchLayout.classList.toggle("display-results", on);
+      searchArea?.classList.toggle("display-results", on);
+    };
 
     const tagDropdown = document.createElement("div");
     tagDropdown.className = "tag-suggestions";
@@ -190,6 +158,40 @@ async function setupSearch() {
     let filteredTags: string[] = [];
     let tagDropdownVisible = false;
 
+    // The ghost text overlays the input: give it the input's box, font and scroll, so it
+    // lines up whatever styles the input (Quartz's, or an Obsidian theme's prompt input).
+    const alignGhostText = () => {
+      const host = ghostText.offsetParent as HTMLElement | null;
+      if (!host) return;
+      const bar = searchBar.getBoundingClientRect();
+      const box = host.getBoundingClientRect();
+      const hostStyle = getComputedStyle(host);
+      const input = getComputedStyle(searchBar);
+      const px = (v: string) => parseFloat(v) || 0;
+      const inner =
+        bar.height -
+        px(input.paddingTop) -
+        px(input.paddingBottom) -
+        px(input.borderTopWidth) -
+        px(input.borderBottomWidth);
+      Object.assign(ghostText.style, {
+        left: `${bar.left - box.left - px(hostStyle.borderLeftWidth)}px`,
+        top: `${bar.top - box.top - px(hostStyle.borderTopWidth)}px`,
+        right: "auto",
+        width: `${bar.width}px`,
+        height: `${bar.height}px`,
+        boxSizing: "border-box",
+        padding: input.padding,
+        borderStyle: "solid",
+        borderColor: "transparent",
+        borderWidth: input.borderWidth,
+        font: input.font,
+        letterSpacing: input.letterSpacing,
+        lineHeight: `${Math.max(inner, 0)}px`,
+        textIndent: `${-searchBar.scrollLeft}px`,
+      });
+    };
+
     const updateGhostText = (partial: string) => {
       if (tagSuggestionIndex < 0 || tagSuggestionIndex >= filteredTags.length) {
         ghostText.textContent = "";
@@ -207,6 +209,7 @@ async function setupSearch() {
       invisible.textContent = searchBar.value;
       ghostText.appendChild(invisible);
       ghostText.appendChild(document.createTextNode(completion));
+      alignGhostText();
     };
 
     const updateTagDropdownHighlight = () => {
@@ -286,7 +289,7 @@ async function setupSearch() {
       searchBar.value = "";
       removeAllChildren(results!);
       if (preview) removeAllChildren(preview);
-      searchLayout.classList.remove("display-results");
+      setDisplayResults(false);
       searchType = "basic";
       currentHover = null;
       hideTagDropdown();
@@ -306,7 +309,7 @@ async function setupSearch() {
 
       if (finalResults.length === 0) {
         const noMatch = document.createElement("a");
-        noMatch.className = "result-card no-match";
+        noMatch.className = "result-card suggestion-item mod-complex no-match";
         const noMatchTitle = document.createElement("h3");
         noMatchTitle.textContent = "No results.";
         const noMatchHint = document.createElement("p");
@@ -319,12 +322,12 @@ async function setupSearch() {
       } else {
         for (const item of finalResults) {
           const itemTile = document.createElement("a");
-          itemTile.className = "result-card";
+          itemTile.className = "result-card suggestion-item mod-complex";
           itemTile.id = item.slug;
           itemTile.href = resolveBasePath(item.slug);
 
           const titleEl = document.createElement("h3");
-          titleEl.className = "card-title";
+          titleEl.className = "card-title suggestion-title";
           titleEl.innerHTML = item.title.replace(/<(?!\/?span\b)[^>]*>/gi, "");
           itemTile.appendChild(titleEl);
 
@@ -336,7 +339,7 @@ async function setupSearch() {
           }
 
           const descEl = document.createElement("p");
-          descEl.className = "card-description";
+          descEl.className = "card-description suggestion-note";
           descEl.innerHTML = item.content.replace(/<(?!\/?span\b)[^>]*>/gi, "");
           itemTile.appendChild(descEl);
 
@@ -390,10 +393,10 @@ async function setupSearch() {
     };
 
     const setFocus = (el: HTMLElement | null) => {
-      if (currentHover) currentHover.classList.remove("focus");
+      if (currentHover) currentHover.classList.remove("focus", "is-selected");
       currentHover = el;
       if (currentHover) {
-        currentHover.classList.add("focus");
+        currentHover.classList.add("focus", "is-selected");
         currentHover.scrollIntoView({ block: "nearest" });
       }
       if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
@@ -439,7 +442,7 @@ async function setupSearch() {
 
       const parsed = parseSearchQuery(inputValue);
       const hasContent = parsed.query !== "" || parsed.tags.length > 0;
-      searchLayout.classList.toggle("display-results", hasContent);
+      setDisplayResults(hasContent);
       searchType = parsed.tags.length > 0 && !parsed.query ? "tags" : "basic";
 
       if (!hasContent) {
@@ -646,8 +649,14 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
   const tokenizedTerms = tokenizeTerm(searchTerm).filter((term) => term.trim() !== "");
   if (tokenizedTerms.length === 0) return el.innerHTML;
   const html = parser.parseFromString(el.innerHTML, "text/html");
+  // a typed quote also matches its typographic forms (`don’t` for "don't")
   const combined = tokenizedTerms
-    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .map((term) =>
+      term
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/['\u2018\u2019\u02bc]/g, "['\u2018\u2019\u02bc]")
+        .replace(/["\u201c\u201d]/g, '["\u201c\u201d]'),
+    )
     .join("|");
   if (combined === "") return el.innerHTML;
   const regex = new RegExp(combined, "gi");
@@ -686,16 +695,17 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
 
 function highlight(searchTerm: string, text: string, trim?: boolean): string {
   const tokenizedTerms = tokenizeTerm(searchTerm);
-  let tokenizedText = escapeHTML(text)
-    .split(/\s+/)
-    .filter((t) => t !== "");
+  // Match on the plain text and escape each piece, so a term never splits an entity
+  let tokenizedText = text.split(/\s+/).filter((t) => t !== "");
 
   let startIndex = 0;
   let endIndex = tokenizedText.length - 1;
 
   if (trim) {
+    // As the index matches: a word by its letters too (`"hello";` for "hello")
     const includesCheck = (tok: string) => {
-      return tokenizedTerms.some((term) => tok.toLowerCase().startsWith(term.toLowerCase()));
+      const words = encoder(tok);
+      return tokenizedTerms.some((term) => words.some((w) => w.startsWith(term.toLowerCase())));
     };
     const occurrencesIndices = tokenizedText.map(includesCheck);
 
@@ -717,15 +727,25 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
 
   const slice = tokenizedText
     .map((tok) => {
-      let result = tok;
+      // Matched with typographic quotes folded (`don’t` for "don't"), shown as written
+      const folded = foldQuotes(tok.toLowerCase());
       for (const searchTok of tokenizedTerms) {
-        if (tok.toLowerCase().includes(searchTok.toLowerCase())) {
-          const regex = new RegExp(searchTok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-          result = tok.replace(regex, (match) => `<span class="highlight">${match}</span>`);
-          break;
+        const term = foldQuotes(searchTok.toLowerCase());
+        if (!term || !folded.includes(term)) continue;
+        if (folded.length !== tok.length) {
+          // lowercasing changed the length (`İ`): mark the whole word
+          return `<span class="highlight suggestion-highlight">${escapeHTML(tok)}</span>`;
         }
+        let html = "";
+        let at = 0;
+        for (let i = folded.indexOf(term); i !== -1; i = folded.indexOf(term, at)) {
+          html += escapeHTML(tok.slice(at, i));
+          html += `<span class="highlight suggestion-highlight">${escapeHTML(tok.slice(i, i + term.length))}</span>`;
+          at = i + term.length;
+        }
+        return html + escapeHTML(tok.slice(at));
       }
-      return result;
+      return escapeHTML(tok);
     })
     .join(" ");
 
@@ -807,9 +827,21 @@ async function fillDocument() {
   allTags = [...tagSet].sort();
 }
 
+/** Copies of the entries with plain-text content (the fetched index is shared). */
+function withPlainText(entries: Record<string, Item>): Record<string, Item> {
+  const out: Record<string, Item> = {};
+  for (const [slug, item] of Object.entries(entries)) {
+    out[slug] =
+      item && typeof item.content === "string"
+        ? { ...item, content: plainText(item.content) }
+        : item;
+  }
+  return out;
+}
+
 async function fetchContentIndex(): Promise<Record<string, Item>> {
   const data = await fetchData;
-  return data as unknown as Record<string, Item>;
+  return withPlainText(data as unknown as Record<string, Item>);
 }
 
 let indexInitialized = false;
@@ -823,6 +855,7 @@ async function initIndex() {
 
 async function addContentIndexEntries(patch: Record<string, Item>): Promise<number> {
   if (!indexInitialized || !contentData) return 0;
+  patch = withPlainText(patch);
   const tagSet = new Set<string>(allTags);
   let added = 0;
   for (const slug of Object.keys(patch)) {
