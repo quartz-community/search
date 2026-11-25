@@ -7,6 +7,7 @@ import {
   escapeHTML,
 } from "@quartz-community/utils";
 import { plainText } from "../../util/plainText";
+import { encoder, foldQuotes } from "../../util/encoder";
 
 interface Item {
   id: number;
@@ -23,50 +24,6 @@ let currentSearchTerm: string = "";
 const numSearchResults = 8;
 const numTagResults = 5;
 const contextWindowWords = 30;
-
-const encoder = (str: string): string[] => {
-  const tokens: string[] = [];
-  let bufferStart = -1;
-  let bufferEnd = -1;
-  const lower = str.toLowerCase();
-  let i = 0;
-
-  for (const char of lower) {
-    const code = char.codePointAt(0)!;
-
-    const isCJK =
-      (code >= 0x3040 && code <= 0x309f) ||
-      (code >= 0x30a0 && code <= 0x30ff) ||
-      (code >= 0x4e00 && code <= 0x9fff) ||
-      (code >= 0xac00 && code <= 0xd7af) ||
-      (code >= 0x20000 && code <= 0x2a6df);
-
-    const isWhitespace = code === 32 || code === 9 || code === 10 || code === 13;
-
-    if (isCJK) {
-      if (bufferStart !== -1) {
-        tokens.push(lower.slice(bufferStart, bufferEnd));
-        bufferStart = -1;
-      }
-      tokens.push(char);
-    } else if (isWhitespace) {
-      if (bufferStart !== -1) {
-        tokens.push(lower.slice(bufferStart, bufferEnd));
-        bufferStart = -1;
-      }
-    } else {
-      if (bufferStart === -1) bufferStart = i;
-      bufferEnd = i + 1;
-    }
-    i += char.length;
-  }
-
-  if (bufferStart !== -1) {
-    tokens.push(lower.slice(bufferStart));
-  }
-
-  return tokens;
-};
 
 const index = new FlexSearch.Document({
   encode: encoder,
@@ -692,8 +649,14 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
   const tokenizedTerms = tokenizeTerm(searchTerm).filter((term) => term.trim() !== "");
   if (tokenizedTerms.length === 0) return el.innerHTML;
   const html = parser.parseFromString(el.innerHTML, "text/html");
+  // a typed quote also matches its typographic forms (`don’t` for "don't")
   const combined = tokenizedTerms
-    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .map((term) =>
+      term
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/['\u2018\u2019\u02bc]/g, "['\u2018\u2019\u02bc]")
+        .replace(/["\u201c\u201d]/g, '["\u201c\u201d]'),
+    )
     .join("|");
   if (combined === "") return el.innerHTML;
   const regex = new RegExp(combined, "gi");
@@ -739,8 +702,10 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
   let endIndex = tokenizedText.length - 1;
 
   if (trim) {
+    // As the index matches: a word by its letters too (`"hello";` for "hello")
     const includesCheck = (tok: string) => {
-      return tokenizedTerms.some((term) => tok.toLowerCase().startsWith(term.toLowerCase()));
+      const words = encoder(tok);
+      return tokenizedTerms.some((term) => words.some((w) => w.startsWith(term.toLowerCase())));
     };
     const occurrencesIndices = tokenizedText.map(includesCheck);
 
@@ -762,18 +727,23 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
 
   const slice = tokenizedText
     .map((tok) => {
+      // Matched with typographic quotes folded (`don’t` for "don't"), shown as written
+      const folded = foldQuotes(tok.toLowerCase());
       for (const searchTok of tokenizedTerms) {
-        if (tok.toLowerCase().includes(searchTok.toLowerCase())) {
-          const regex = new RegExp(`(${searchTok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-          return tok
-            .split(regex)
-            .map((part, i) =>
-              i % 2
-                ? `<span class="highlight suggestion-highlight">${escapeHTML(part)}</span>`
-                : escapeHTML(part),
-            )
-            .join("");
+        const term = foldQuotes(searchTok.toLowerCase());
+        if (!term || !folded.includes(term)) continue;
+        if (folded.length !== tok.length) {
+          // lowercasing changed the length (`İ`): mark the whole word
+          return `<span class="highlight suggestion-highlight">${escapeHTML(tok)}</span>`;
         }
+        let html = "";
+        let at = 0;
+        for (let i = folded.indexOf(term); i !== -1; i = folded.indexOf(term, at)) {
+          html += escapeHTML(tok.slice(at, i));
+          html += `<span class="highlight suggestion-highlight">${escapeHTML(tok.slice(i, i + term.length))}</span>`;
+          at = i + term.length;
+        }
+        return html + escapeHTML(tok.slice(at));
       }
       return escapeHTML(tok);
     })
