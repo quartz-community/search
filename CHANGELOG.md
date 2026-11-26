@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+### Patch Changes
+
+- bf6bdee: The search button's text uses `--darkgray` instead of `--gray`, which on the default light background was about 1.9:1 contrast (WCAG asks for 4.5:1).
+
 ## 1.1.0
 
 ### Minor Changes
