@@ -7,7 +7,8 @@ import {
   escapeHTML,
 } from "@quartz-community/utils";
 import { plainText } from "../../util/plainText";
-import { encoder, foldQuotes } from "../../util/encoder";
+import { encoder, foldForSearch } from "../../util/encoder";
+import { normalizeTag, parseSearchQuery } from "../../util/query";
 
 interface Item {
   id: number;
@@ -43,20 +44,6 @@ let idDataMap: string[] = [];
 let allTags: string[] = [];
 const fetchContentCache = new Map<string, Element[]>();
 
-function parseSearchQuery(input: string): { tags: string[]; query: string } {
-  const tokens = input.split(/\s+/);
-  const tags: string[] = [];
-  const queryParts: string[] = [];
-  for (const token of tokens) {
-    if (token.startsWith("#") && token.length > 1) {
-      tags.push(token.substring(1));
-    } else if (token !== "#") {
-      queryParts.push(token);
-    }
-  }
-  return { tags, query: queryParts.join(" ").trim() };
-}
-
 function getCurrentTagToken(input: string): string | null {
   const tokens = input.split(/\s+/);
   const last = tokens[tokens.length - 1];
@@ -87,6 +74,16 @@ async function fetchContent(slug: string): Promise<Element[]> {
 }
 
 const cleanupFns: Array<() => void> = [];
+
+/**
+ * Go to `url` through Quartz's router (`window.spaNavigate`: SPA navigation, or a page load with
+ * SPA navigation off), as a click on a link does.
+ */
+function navigateTo(url: URL) {
+  const nav = (window as { spaNavigate?: (url: URL, isBack?: boolean) => unknown }).spaNavigate;
+  if (typeof nav === "function") void nav(url, false);
+  else window.location.assign(url);
+}
 
 function addCleanup(fn: () => void) {
   cleanupFns.push(fn);
@@ -245,7 +242,7 @@ async function setupSearch() {
       filteredTags =
         partial === ""
           ? allTags.slice(0, 10)
-          : allTags.filter((t) => t.toLowerCase().startsWith(partial.toLowerCase())).slice(0, 10);
+          : allTags.filter((t) => foldForSearch(t).startsWith(foldForSearch(partial))).slice(0, 10);
       if (filteredTags.length === 0) {
         hideTagDropdown();
         return;
@@ -483,9 +480,7 @@ async function setupSearch() {
         const item = contentData?.[slug];
         if (!item) return false;
         const itemTags: string[] = item.tags || [];
-        return parsed.tags.every((tag) =>
-          itemTags.some((t) => t.toLowerCase() === tag.toLowerCase()),
-        );
+        return parsed.tags.every((tag) => itemTags.some((t) => normalizeTag(t) === tag));
       });
 
       const displayTerm =
@@ -555,8 +550,11 @@ async function setupSearch() {
         if (focused instanceof HTMLAnchorElement) {
           e.preventDefault();
           storeSearchTerm();
+          // hideSearch empties the results: clicking the (then detached) link would bypass
+          // Quartz's router, whose click handler is on the document, and reload the page
+          const url = new URL(focused.href);
           hideSearch();
-          focused.click();
+          navigateTo(url);
         }
       }
     };
@@ -652,7 +650,7 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
   // a typed quote also matches its typographic forms (`don’t` for "don't")
   const combined = tokenizedTerms
     .map((term) =>
-      term
+      foldForSearch(term)
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/['\u2018\u2019\u02bc]/g, "['\u2018\u2019\u02bc]")
         .replace(/["\u201c\u201d]/g, '["\u201c\u201d]'),
@@ -669,19 +667,22 @@ function highlightHTML(searchTerm: string, el: HTMLElement): string {
   }
   for (const textNode of nodes) {
     const text = textNode.nodeValue ?? "";
+    // matched with accents folded (`creme` marks "Crème") where that keeps the offsets
+    const folded = foldForSearch(text);
+    const haystack = folded.length === text.length ? folded : text;
     regex.lastIndex = 0;
-    if (!regex.test(text)) continue;
+    if (!regex.test(haystack)) continue;
     regex.lastIndex = 0;
     const fragment = html.createDocumentFragment();
     let lastIndex = 0;
     let match: RegExpExecArray | null;
-    while ((match = regex.exec(text)) !== null) {
+    while ((match = regex.exec(haystack)) !== null) {
       if (match.index > lastIndex) {
         fragment.appendChild(html.createTextNode(text.slice(lastIndex, match.index)));
       }
       const span = html.createElement("span");
       span.className = "highlight";
-      span.textContent = match[0];
+      span.textContent = text.slice(match.index, match.index + match[0].length);
       fragment.appendChild(span);
       lastIndex = match.index + match[0].length;
     }
@@ -705,7 +706,10 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
     // As the index matches: a word by its letters too (`"hello";` for "hello")
     const includesCheck = (tok: string) => {
       const words = encoder(tok);
-      return tokenizedTerms.some((term) => words.some((w) => w.startsWith(term.toLowerCase())));
+      return tokenizedTerms.some((term) => {
+        const folded = foldForSearch(term);
+        return words.some((w) => w.startsWith(folded));
+      });
     };
     const occurrencesIndices = tokenizedText.map(includesCheck);
 
@@ -727,13 +731,14 @@ function highlight(searchTerm: string, text: string, trim?: boolean): string {
 
   const slice = tokenizedText
     .map((tok) => {
-      // Matched with typographic quotes folded (`don’t` for "don't"), shown as written
-      const folded = foldQuotes(tok.toLowerCase());
+      // Matched as the index matches (typographic quotes and accents folded: `don’t` for
+      // "don't", `Crème` for "creme"), shown as written
+      const folded = foldForSearch(tok);
       for (const searchTok of tokenizedTerms) {
-        const term = foldQuotes(searchTok.toLowerCase());
+        const term = foldForSearch(searchTok);
         if (!term || !folded.includes(term)) continue;
         if (folded.length !== tok.length) {
-          // lowercasing changed the length (`İ`): mark the whole word
+          // folding changed the length (`İ`, `ß`): mark the whole word
           return `<span class="highlight suggestion-highlight">${escapeHTML(tok)}</span>`;
         }
         let html = "";
@@ -759,7 +764,7 @@ function highlightTags(searchTags: string[], tags?: string[]): string[] {
   return tags
     .map((tag) => {
       const escaped = escapeHTML(tag);
-      if (searchTags.some((st) => tag.toLowerCase().includes(st.toLowerCase()))) {
+      if (searchTags.some((st) => foldForSearch(tag).includes(foldForSearch(st)))) {
         return `<li><p class="match-tag">#${escaped}</p></li>`;
       } else {
         return `<li><p>#${escaped}</p></li>`;
@@ -926,7 +931,13 @@ function scrollToSearchTerm() {
 
     for (const el of candidates) {
       const text = el.textContent ?? "";
-      const idx = text.toLowerCase().indexOf(term.toLowerCase());
+      // found as search finds it (accents folded) where that keeps the offsets
+      const folded = foldForSearch(text);
+      const foldedTerm = foldForSearch(term);
+      const idx =
+        folded.length === text.length && foldedTerm.length === term.length
+          ? folded.indexOf(foldedTerm)
+          : text.toLowerCase().indexOf(term.toLowerCase());
       if (idx === -1) continue;
 
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);

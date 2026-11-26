@@ -1,3 +1,5 @@
+import { stripDiacritics } from "@quartz-community/utils/path";
+
 /**
  * Search tokens: whitespace-separated words, CJK characters one by one (CJK text has no
  * spaces between words).
@@ -10,11 +12,21 @@ export function foldQuotes(str: string): string {
   return str.replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"');
 }
 
+/**
+ * Text as search compares it: lowercase, typographic quotes as typed ones, and Latin letters
+ * without their accents, so `creme` finds "Crème brûlée" and `crème` finds "creme" (whatever
+ * `slugs.stripDiacritics` is). Other scripts are kept as written. Mostly keeps the length; a few
+ * letters fold to two (`ß` → `ss`), so callers that map offsets back check the lengths.
+ */
+export function foldForSearch(str: string): string {
+  return stripDiacritics(foldQuotes(str.toLowerCase()));
+}
+
 function splitTokens(str: string): string[] {
   const tokens: string[] = [];
   let bufferStart = -1;
   let bufferEnd = -1;
-  const lower = foldQuotes(str.toLowerCase());
+  const lower = foldForSearch(str);
   let i = 0;
 
   for (const char of lower) {
