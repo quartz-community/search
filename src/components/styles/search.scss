@@ -27,7 +27,8 @@
 
 .search > .search-button > p {
   display: inline;
-  color: var(--gray);
+  // --gray on --light is about 1.9:1, too faint to read (WCAG asks 4.5:1).
+  color: var(--darkgray);
   text-wrap: unset;
 }
 
