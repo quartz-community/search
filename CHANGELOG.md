@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- 41f4620: Search carries the classes of Obsidian's quick switcher, so Obsidian themes (via `@quartz-themes/core`) style it as they style that:
+
+  - the input and results are `.prompt`, with `.prompt-input` and `.prompt-results`;
+  - results are `.suggestion-item.mod-complex`, with `.suggestion-title` and `.suggestion-note`;
+  - the selected result gets `.is-selected`, and matches get `.suggestion-highlight`;
+  - the overlay gets `mod-dim`.
+
+  The preview is now its own panel beside the results, with Obsidian's page-preview classes (`.popover.hover-popover > .markdown-embed`). Under a theme, search shows two windows: the preview left of the switcher. Without a theme, it looks as before.
+
+### Patch Changes
+
+- 809212e: Excerpts show the page's text as written, not HTML entities (`"hello"`, not `&quot;hello&quot;`). The content index holds text escaped by the Description plugin, which search escaped a second time; it is now decoded once when loaded. Searching "quot" or "amp" no longer matches every page with quotes or ampersands, and a term can't split an entity when highlighted. The `#tag` autocomplete ghost text takes the input's box, font and scroll, so it lines up with what is typed under any styling.
+- f1385bf: Words with punctuation attached can be found by their letters:
+
+  - `hello` finds `"hello";`, `nbsp` finds `&nbsp;`, and `node` finds `node.js`;
+  - exact searches (`node.js`, `c++`, `"hello"`) still match;
+  - typographic quotes match typed ones, so `don't` finds Quartz's typeset `don’t`, and its excerpt and preview highlight it.
+
+  The encoder indexes each word as written, without its leading and trailing punctuation, and as its parts.
+
 ## 1.0.3
 
 ### Patch Changes
