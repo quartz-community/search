@@ -46,11 +46,41 @@ describe("highlight (result titles and text)", () => {
     expect(html.endsWith("...")).toBe(true);
   });
 
-  // The trimmed text drops its last word and adds "..." even when nothing was cut:
-  // tokenizedText.slice(startIndex, endIndex) excludes endIndex, and the "..." check
-  // compares endIndex with the sliced list's length.
-  it.fails("keeps all of a short text when trimming", () => {
+  it("keeps all of a short text when trimming", () => {
     expect(highlight("word", "one two word three", true)).toBe(`one two ${mark("word")} three`);
+    expect(highlight("alpha", "Alpha beta gamma omega.", true)).toBe(
+      `${mark("Alpha")} beta gamma omega.`,
+    );
+    expect(highlight("word", "word", true)).toBe(mark("word"));
+    expect(highlight("word", "", true)).toBe("");
+  });
+
+  it("keeps a text of exactly the excerpt's length (60 words) whole", () => {
+    const words = Array.from({ length: 60 }, (_, i) => `w${i}`);
+    expect(highlight("w0", words.join(" "), true)).toBe([mark("w0"), ...words.slice(1)].join(" "));
+    expect(highlight("absent", words.join(" "), true)).toBe(words.join(" "));
+  });
+
+  it("cuts one word over the excerpt's length, marking the cut end", () => {
+    const words = Array.from({ length: 61 }, (_, i) => `w${i}`);
+    words[0] = "first";
+    words[60] = "last";
+    // the match at the start: the last word cut
+    expect(highlight("first", words.join(" "), true)).toBe(
+      [mark("first"), ...words.slice(1, 60)].join(" ") + "...",
+    );
+    // the match at the end: the first word cut
+    expect(highlight("last", words.join(" "), true)).toBe(
+      "..." + [...words.slice(1, 60), mark("last")].join(" "),
+    );
+  });
+
+  it("shows a match in the last word of a long text", () => {
+    const words = Array.from({ length: 200 }, (_, i) => `w${i}`);
+    words[199] = "target";
+    expect(highlight("target", words.join(" "), true)).toBe(
+      "..." + [...words.slice(140, 199), mark("target")].join(" "),
+    );
   });
 });
 
