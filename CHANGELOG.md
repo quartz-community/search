@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.4
+
+### Patch Changes
+
+- 53a34cd: A word ending in an emoji or another character outside the Basic Multilingual Plane is indexed whole, so searching for it as written finds the page.
+- 6618933: Matches in a field that `fieldPriority` leaves out (such as `tags` with `fieldPriority: [content, title]`) are no longer dropped: they are ranked after the listed fields.
+
 ## 1.1.3
 
 ### Patch Changes
