@@ -529,7 +529,10 @@ async function setupSearch() {
           }
         }
         if (e.key === "Escape") {
+          // Closes only the dropdown: stop the event before the document's Escape handler,
+          // which would close the whole search and drop the query.
           e.preventDefault();
+          e.stopPropagation();
           hideTagDropdown();
           return;
         }
