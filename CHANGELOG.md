@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+### Patch Changes
+
+- d87858a: Search result excerpts no longer drop the last word and add `...` to a text short enough to show whole, and a match in the last word of a long text is now shown in its excerpt.
+
 ## 1.1.2
 
 ### Patch Changes
