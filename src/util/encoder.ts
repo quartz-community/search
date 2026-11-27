@@ -54,7 +54,7 @@ function splitTokens(str: string): string[] {
       }
     } else {
       if (bufferStart === -1) bufferStart = i;
-      bufferEnd = i + 1;
+      bufferEnd = i + char.length;
     }
     i += char.length;
   }

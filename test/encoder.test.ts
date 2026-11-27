@@ -87,3 +87,20 @@ describe("accent-insensitive search", () => {
     expect(foldForSearch("नमस्ते")).toBe("नमस्ते");
   });
 });
+
+describe("encoder: characters outside the CJK blocks", () => {
+  it("keeps other wide characters in their word", () => {
+    // fullwidth Latin letters and emoji come after the Hangul block
+    expect(encoder("aａb")).toEqual(["aａb"]);
+    expect(encoder("a😀b")).toEqual(["a😀b", "a", "b"]);
+  });
+
+  it("keeps a word's last character when it is outside the BMP", () => {
+    expect(encoder("x😀 y")).toEqual(encoder("x😀").concat("y"));
+    expect(encoder("𝔸𝔹 c")[0]).toBe("𝔸𝔹");
+  });
+
+  it("keeps a word's last character outside the BMP before a CJK character", () => {
+    expect(encoder("x😀中")).toEqual([...encoder("x😀"), "中"]);
+  });
+});
