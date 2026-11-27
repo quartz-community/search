@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.5
+
+### Patch Changes
+
+- 8bf629f: Escape with the tag suggestions open closes only the suggestions; it no longer closes the whole search and loses the query.
+
 ## 1.1.4
 
 ### Patch Changes
