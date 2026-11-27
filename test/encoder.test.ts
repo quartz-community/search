@@ -95,10 +95,12 @@ describe("encoder: characters outside the CJK blocks", () => {
     expect(encoder("a😀b")).toEqual(["a😀b", "a", "b"]);
   });
 
-  // bug: a word ending in a character outside the BMP (an emoji, 𝔸) loses that character's
-  // second half when a space follows, so the page is not found by the word as written.
-  it.fails("keeps a word's last character when it is outside the BMP", () => {
+  it("keeps a word's last character when it is outside the BMP", () => {
     expect(encoder("x😀 y")).toEqual(encoder("x😀").concat("y"));
     expect(encoder("𝔸𝔹 c")[0]).toBe("𝔸𝔹");
+  });
+
+  it("keeps a word's last character outside the BMP before a CJK character", () => {
+    expect(encoder("x😀中")).toEqual([...encoder("x😀"), "中"]);
   });
 });
