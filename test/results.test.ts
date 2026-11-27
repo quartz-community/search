@@ -20,10 +20,12 @@ describe("search result ranking (fieldPriority)", () => {
     expect(rankResultIds([], ["title", "content", "tags"])).toEqual([]);
   });
 
-  // bug: the option is documented as the order in which matches are ranked, but a field left
-  // out of it loses its matches: with `fieldPriority: [content, title]`, a #tag search (which
-  // only searches the tags field) finds nothing.
-  it.fails("keeps the matches of a field fieldPriority leaves out", () => {
+  it("keeps the matches of a field fieldPriority leaves out", () => {
     expect(rankResultIds([{ field: "tags", result: [7] }], ["content", "title"])).toEqual([7]);
+  });
+
+  it("ranks the fields fieldPriority leaves out after the ones it lists", () => {
+    const withTags = [{ field: "tags", result: [7, 1] }, ...results];
+    expect(rankResultIds(withTags, ["title", "content"])).toEqual([1, 5, 3, 4, 7]);
   });
 });
