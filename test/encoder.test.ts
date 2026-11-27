@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encoder } from "../src/util/encoder";
+import { encoder, foldForSearch } from "../src/util/encoder";
 
 describe("search encoder", () => {
   it("indexes words with punctuation attached by their letters too", () => {
@@ -19,6 +19,8 @@ describe("search encoder", () => {
       "space)",
       "space",
     ]);
+    // all the leading punctuation goes, not just one character
+    expect(encoder('""hi')).toEqual(['""hi', "hi"]);
   });
 
   it("keeps the word as written, and its parts", () => {
@@ -31,7 +33,57 @@ describe("search encoder", () => {
     expect(encoder("don’t “quote”")).toEqual(["don't", "don", "t", '"quote"', "quote"]);
   });
 
-  it("lowercases, and splits CJK text into characters", () => {
-    expect(encoder("Hello 日本語")).toEqual(["hello", "日", "本", "語"]);
+  it("splits on spaces, tabs and line breaks", () => {
+    expect(encoder("a\tb\nc\rd e")).toEqual(["a", "b", "c", "d", "e"]);
+    expect(encoder("foo ")).toEqual(["foo"]);
+    // a word that starts at offset 1
+    expect(encoder(" ab")).toEqual(["ab"]);
+    expect(encoder(" ab c")).toEqual(["ab", "c"]);
+  });
+});
+
+describe("CJK text", () => {
+  it("is split into characters: hiragana, katakana, kanji, hangul, CJK Extension B", () => {
+    // カ appears twice and is indexed once
+    expect(encoder("ひらがな カタカナ")).toEqual(["ひ", "ら", "が", "な", "カ", "タ", "ナ"]);
+    expect(encoder("한국어 日本")).toEqual(["한", "국", "어", "日", "本"]);
+    expect(encoder("𠀋x")).toEqual(["𠀋", "x"]);
+  });
+
+  it("flushes the Latin word before it", () => {
+    expect(encoder("Quartz使い方")).toEqual(["quartz", "使", "い", "方"]);
+    expect(encoder(" ab日")).toEqual(["ab", "日"]);
+  });
+
+  it("includes the first and last character of each block", () => {
+    // ぁ ゟ, ゠ ヿ, 一 鿿, 가 힣, 𠀀 𪛟: each split from the Latin letters around it
+    const edges = [
+      "\u3041",
+      "\u309f",
+      "\u30a0",
+      "\u30ff",
+      "\u4e00",
+      "\u9fff",
+      "\uac00",
+      "\ud7a3",
+      "\u{20000}",
+      "\u{2a6df}",
+    ];
+    for (const c of edges) expect(encoder(`a${c}b`)).toEqual(["a", c, "b"]);
+    // just outside: U+3190 and U+A000 (Yi) are not split
+    expect(encoder("a\u3190b")).toEqual(["a\u3190b", "a", "b"]);
+    expect(encoder("a\ua000b")).toEqual(["a\ua000b"]);
+  });
+});
+
+describe("accent-insensitive search", () => {
+  it("folds Latin accents in the index and the query, both ways", () => {
+    expect(encoder("Crème brûlée")).toEqual(["creme", "brulee"]);
+    expect(encoder("crème")).toEqual(encoder("creme"));
+    expect(foldForSearch("Ça VA")).toBe("ca va");
+  });
+
+  it("keeps other scripts as written", () => {
+    expect(foldForSearch("नमस्ते")).toBe("नमस्ते");
   });
 });
