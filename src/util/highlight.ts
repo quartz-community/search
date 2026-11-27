@@ -83,8 +83,10 @@ export function highlight(searchTerm: string, text: string, trim?: boolean): str
   // Match on the plain text and escape each piece, so a term never splits an entity
   let tokenizedText = text.split(/\s+/).filter((t) => t !== "");
 
+  const wordCount = tokenizedText.length;
+  // The words shown: [startIndex, endIndex), end exclusive
   let startIndex = 0;
-  let endIndex = tokenizedText.length - 1;
+  let endIndex = wordCount;
 
   if (trim) {
     // As the index matches: a word by its letters too (`"hello";` for "hello")
@@ -99,7 +101,8 @@ export function highlight(searchTerm: string, text: string, trim?: boolean): str
 
     let bestSum = 0;
     let bestIndex = 0;
-    for (let i = 0; i < Math.max(tokenizedText.length - contextWindowWords, 0); i++) {
+    // every window start, the last full window (ending at the last word) included
+    for (let i = 0; i <= Math.max(wordCount - contextWindowWords, 0); i++) {
       const window = occurrencesIndices.slice(i, i + contextWindowWords);
       const windowSum = window.reduce((total, cur) => total + (cur ? 1 : 0), 0);
       if (windowSum >= bestSum) {
@@ -109,7 +112,7 @@ export function highlight(searchTerm: string, text: string, trim?: boolean): str
     }
 
     startIndex = Math.max(bestIndex - contextWindowWords, 0);
-    endIndex = Math.min(startIndex + 2 * contextWindowWords, tokenizedText.length - 1);
+    endIndex = Math.min(startIndex + 2 * contextWindowWords, wordCount);
     tokenizedText = tokenizedText.slice(startIndex, endIndex);
   }
 
@@ -138,9 +141,7 @@ export function highlight(searchTerm: string, text: string, trim?: boolean): str
     })
     .join(" ");
 
-  return (
-    (startIndex === 0 ? "" : "...") + slice + (endIndex === tokenizedText.length - 1 ? "" : "...")
-  );
+  return (startIndex === 0 ? "" : "...") + slice + (endIndex === wordCount ? "" : "...");
 }
 
 /** A result's tags as list items (at most {@link numTagResults}), the searched ones marked. */
