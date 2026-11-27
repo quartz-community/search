@@ -9,6 +9,7 @@ import {
 import { plainText } from "../../util/plainText";
 import { encoder, foldForSearch } from "../../util/encoder";
 import { parseSearchQuery } from "../../util/query";
+import { rankResultIds } from "../../util/results";
 import {
   highlight,
   highlightPattern,
@@ -471,12 +472,7 @@ async function setupSearch() {
         searchResults = [];
       }
 
-      const getByField = (field: string): number[] => {
-        const matched = searchResults.filter((x: any) => x.field === field);
-        return matched.length === 0 ? [] : ([...matched[0].result] as number[]);
-      };
-
-      const allIds: Set<number> = new Set(fieldPriority.flatMap((field) => getByField(field)));
+      const allIds: Set<number> = new Set(rankResultIds(searchResults, fieldPriority));
 
       const filteredIds = [...allIds].filter((id) => {
         if (parsed.tags.length === 0) return true;

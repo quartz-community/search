@@ -165,3 +165,16 @@ describe("highlightTags", () => {
     expect(highlightTags(["a"], [])).toEqual([]);
   });
 });
+
+describe("highlightTags with several searched tags", () => {
+  it("marks a tag matching any of them", () => {
+    expect(highlightTags(["a", "b"], ["b", "c"])).toEqual([
+      '<li><p class="match-tag">#b</p></li>',
+      "<li><p>#c</p></li>",
+    ]);
+  });
+
+  it("lists nothing for a page without tags", () => {
+    expect(highlightTags(["a"], undefined)).toEqual([]);
+  });
+});
